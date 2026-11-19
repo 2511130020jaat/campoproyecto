@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const esActivo = (p) =>
     path === p || (p === "/alertas.html" && path === "/")
       ? "bg-sky-500/10 text-sky-400 font-semibold border border-sky-500/20"
-      : "text-slate-400 hover:bg-slate-750 hover:text-slate-200 transition";
+      : "text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 transition";
 
   container.innerHTML = `
     <aside id="sidebar" class="w-64 bg-slate-800 border-r border-slate-700 flex flex-col justify-between fixed lg:static inset-y-0 left-0 z-50 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 h-screen">
@@ -19,23 +19,29 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         </div>
 
-        <nav class="p-4 space-y-2 text-sm">
-          <a href="/alertas.html" class="flex items-center gap-3 px-4 py-3 rounded-xl ${esActivo("/alertas.html")}">
-            <span>🚨</span> Alertas Agroclimáticas
+        <nav class="p-4 space-y-1.5 text-sm">
+          <a href="/alertas.html" class="flex items-center gap-3 px-4 py-2.5 rounded-xl ${esActivo("/alertas.html")}">
+            <span>📰</span> Actualidad y Boletines
           </a>
-          <a href="/panel.html" class="flex items-center gap-3 px-4 py-3 rounded-xl ${esActivo("/panel.html")}">
-            <span>📊</span> Monitoreo en Vivo
+          <a href="/clima.html" class="flex items-center gap-3 px-4 py-2.5 rounded-xl ${esActivo("/clima.html")}">
+            <span>🌦️</span> Pronóstico y Alertas
           </a>
-          <a href="/diseno2d.html" class="flex items-center gap-3 px-4 py-3 rounded-xl ${esActivo("/diseno2d.html")}">
+          <a href="/parcelas.html" class="flex items-center gap-3 px-4 py-2.5 rounded-xl ${esActivo("/parcelas.html")}">
+            <span>🗺️</span> Vista de Campo
+          </a>
+          <a href="/gestion-parcelas.html" class="flex items-center gap-3 px-4 py-2.5 rounded-xl ${esActivo("/gestion-parcelas.html")}">
+            <span>🧭</span> Gestor de Parcelas
+          </a>
+          <a href="/panel.html" class="flex items-center gap-3 px-4 py-2.5 rounded-xl ${esActivo("/panel.html")}">
+            <span>📡</span> Sensores en Vivo
+          </a>
+          <a href="/diseno2d.html" class="flex items-center gap-3 px-4 py-2.5 rounded-xl ${esActivo("/diseno2d.html")}">
             <span>📐</span> Diseñador 2D e IO
           </a>
-          <a href="/riego.html" class="flex items-center gap-3 px-4 py-3 rounded-xl ${esActivo("/riego.html")}">
+          <a href="/riego.html" class="flex items-center gap-3 px-4 py-2.5 rounded-xl ${esActivo("/riego.html")}">
             <span>💧</span> Control de Riego
           </a>
-          <a href="/parcelas.html" class="flex items-center gap-3 px-4 py-3 rounded-xl ${esActivo("/parcelas.html")}">
-            <span>🗺️</span> Gestor de Parcelas
-          </a>
-          <a href="/reportes.html" class="flex items-center gap-3 px-4 py-3 rounded-xl ${esActivo("/reportes.html")}">
+          <a href="/reportes.html" class="flex items-center gap-3 px-4 py-2.5 rounded-xl ${esActivo("/reportes.html")}">
             <span>📈</span> Reportes y Exportación
           </a>
         </nav>

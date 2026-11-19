@@ -178,7 +178,7 @@ function seleccionarCategoria(cat) {
         "Encabezado corporativo y datos del titular de la cuenta",
         "Ficha técnica de parcelas, dimensiones m² y presupuesto PVC",
         "Estadísticas y tabla cronológica de sensores ESP32",
-        "Cronogramas activos y bitácora de eventos de riego",
+        "Cronogramas, riegos pospuestos por clima y agua ahorrada (m³)",
       ],
     },
     telemetria: {
@@ -198,11 +198,11 @@ function seleccionarCategoria(cat) {
       ],
     },
     riego: {
-      titulo: "Contenido del Reporte Operativo y Bitácora de Riego",
+      titulo: "Contenido del Reporte Operativo y Ahorro Hídrico",
       items: [
         "Encabezado corporativo y periodo auditado",
-        "Tabla de horarios automáticos configurados por día y duración",
-        "Historial cronológico de activaciones manuales y automáticas",
+        "Resumen de turnos pospuestos por pronóstico y agua ahorrada (m³)",
+        "Horarios programados y bitácora cronológica de riego",
       ],
     },
   };
@@ -246,6 +246,15 @@ async function cargarDatosReporte() {
   }
 }
 
+function extraerM3Ahorrados(detalle) {
+  if (!detalle) return 0.67;
+  const match = String(detalle).match(/Ahorro est\.:\s*([\d.]+)\s*m³/i);
+  if (match && !isNaN(parseFloat(match[1]))) {
+    return parseFloat(match[1]);
+  }
+  return 0.67;
+}
+
 function calcularMetricasResumen() {
   const tel = datosReporte.telemetria || [];
   const ing = datosReporte.ingenieria || [];
@@ -281,6 +290,12 @@ function calcularMetricasResumen() {
   const totalMetrosPvc = ing.reduce((acc, i) => acc + (i.metros_pvc || 0), 0);
   const totalNodos = ing.reduce((acc, i) => acc + (i.total_nodos || 0), 0);
 
+  const pospuestos = hist.filter((h) => h.accion === "RIEGO POSPUESTO");
+  const totalAguaAhorradaM3 = pospuestos.reduce(
+    (acc, h) => acc + extraerM3Ahorrados(h.detalle),
+    0,
+  );
+
   return {
     promHumSuelo,
     minHumSuelo,
@@ -291,6 +306,8 @@ function calcularMetricasResumen() {
     totalNodos,
     totalLecturas: tel.length,
     totalEventosRiego: hist.length,
+    totalRiegosPospuestos: pospuestos.length,
+    totalAguaAhorradaM3,
   };
 }
 
@@ -323,7 +340,7 @@ async function generarPDF(accion = "abrir") {
     integral: "INFORME EJECUTIVO INTEGRAL DE OPERACIONES Y TELEMETRÍA",
     telemetria: "REPORTE TÉCNICO DE TELEMETRÍA Y MICROCLIMA DE CULTIVOS",
     ingenieria: "MEMORIA DESCRIPTIVA DE INGENIERÍA 2D Y PRESUPUESTO HIDRÁULICO",
-    riego: "REPORTE OPERATIVO DE PROGRAMACIÓN Y BITÁCORA DE RIEGO",
+    riego: "REPORTE OPERATIVO DE PROGRAMACIÓN Y AHORRO HÍDRICO",
   };
 
   const selParcela = document.getElementById("filtroParcela");
@@ -534,10 +551,17 @@ async function generarPDF(accion = "abrir") {
     doc.setFontSize(10.5);
     doc.setTextColor(15, 23, 42);
     doc.text(
-      "Programaciones Horarias y Bitácora de Eventos de Riego",
+      "Programaciones Horarias, Ahorro Hídrico y Bitácora de Riego",
       14,
       cursorY,
     );
+    cursorY += 5;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105);
+    const resumenAhorro = `Riegos evitados por pronóstico de lluvia: ${m.totalRiegosPospuestos} turnos  |  Agua estimada ahorrada: ${m.totalAguaAhorradaM3.toFixed(2)} m³ (${Math.round(m.totalAguaAhorradaM3 * 1000).toLocaleString()} L)`;
+    doc.text(resumenAhorro, 14, cursorY);
     cursorY += 3.5;
 
     const filasProg = (datosReporte.programaciones || []).map((pr) => [
@@ -653,6 +677,18 @@ async function exportarExcel() {
   }
 
   const wb = XLSX.utils.book_new();
+  const m = calcularMetricasResumen();
+
+  const hojaAhorro = XLSX.utils.json_to_sheet([
+    {
+      Riegos_Evitados_Por_Clima: m.totalRiegosPospuestos,
+      Agua_Ahorrada_m3: Number(m.totalAguaAhorradaM3.toFixed(2)),
+      Agua_Ahorrada_Litros: Math.round(m.totalAguaAhorradaM3 * 1000),
+      Total_Parcelas: (datosReporte.ingenieria || []).length,
+      Presupuesto_PVC_Soles: Number(m.totalPresupuesto.toFixed(2)),
+    },
+  ]);
+  XLSX.utils.book_append_sheet(wb, hojaAhorro, "Resumen_Ahorro");
 
   const hojaTel = XLSX.utils.json_to_sheet(
     (datosReporte.telemetria || []).map((t) => ({

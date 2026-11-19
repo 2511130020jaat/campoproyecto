@@ -1,427 +1,541 @@
-const map = L.map("map").setView([-12.6581, -76.6321], 12);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "© OpenStreetMap",
-}).addTo(map);
+let parcelasNodos = [];
+let lecturasPorParcela = {};
+let parcelaSeleccionadaId = null;
+let chartHumedad = null;
+let chartTemperatura = null;
+let intervaloLive = null;
+let actualizandoAhora = false;
 
-let marcadoresMapa = {};
-let listaParcelasGlobal = [];
-let umbralActualParcela = 35;
-let modoActualParcela = "AUTO";
-
-const ctx = document.getElementById("chartTelemetria").getContext("2d");
-const chartTelemetria = new Chart(ctx, {
-  type: "line",
-  data: {
-    labels: [],
-    datasets: [
-      {
-        label: "Temp (°C)",
-        data: [],
-        borderColor: "#f59e0b",
-        tension: 0.3,
-      },
-      {
-        label: "Hum. Suelo (%)",
-        data: [],
-        borderColor: "#10b981",
-        tension: 0.3,
-      },
-      {
-        label: "Hum. Aire (%)",
-        data: [],
-        borderColor: "#06b6d4",
-        tension: 0.3,
-      },
-    ],
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { labels: { color: "#cbd5e1" } } },
-    scales: {
-      x: { ticks: { color: "#94a3b8" }, grid: { color: "#334155" } },
-      y: { ticks: { color: "#94a3b8" }, grid: { color: "#334155" } },
-    },
-  },
+document.addEventListener("DOMContentLoaded", () => {
+  inicializarSensoresVivo();
 });
 
-function actualizarBotoneraModo(modo) {
-  const bAuto = document.getElementById("btnModoAuto");
-  const bOn = document.getElementById("btnModoOn");
-  const bOff = document.getElementById("btnModoOff");
+window.addEventListener("beforeunload", () => {
+  if (intervaloLive) clearInterval(intervaloLive);
+});
 
-  [bAuto, bOn, bOff].forEach((btn) => {
-    btn.className =
-      "px-3 py-1.5 rounded-md font-semibold transition text-slate-400 hover:text-white";
-  });
+// =========================================================================
+// 1. INICIALIZACIÓN Y SINCRONIZACIÓN EN VIVO (CADA 5 SEGUNDOS)
+// =========================================================================
 
-  if (modo === "MANUAL_ON") {
-    bOn.className =
-      "px-3 py-1.5 rounded-md font-semibold transition bg-emerald-600 text-white shadow";
-  } else if (modo === "MANUAL_OFF") {
-    bOff.className =
-      "px-3 py-1.5 rounded-md font-semibold transition bg-rose-600 text-white shadow";
-  } else {
-    bAuto.className =
-      "px-3 py-1.5 rounded-md font-semibold transition bg-sky-600 text-white shadow";
-  }
+async function inicializarSensoresVivo() {
+  if (typeof usuarioSesion === "undefined" || !usuarioSesion) return;
+
+  await actualizarTelemetriaVivo();
+
+  if (intervaloLive) clearInterval(intervaloLive);
+  intervaloLive = setInterval(() => {
+    actualizarTelemetriaVivo(true);
+  }, 5000);
 }
 
-function evaluarRiesgoClimatico(temp, humSuelo) {
-  const banner = document.getElementById("bannerAlerta");
-  const badge = document.getElementById("badgeEstado");
-  const diag = document.getElementById("txtDiagnostico");
-
-  if (modoActualParcela === "MANUAL_ON") {
-    banner.className =
-      "bg-slate-800 border-l-4 border-emerald-500 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg";
-    badge.className =
-      "bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded font-semibold";
-    badge.innerText = "RIEGO FORZADO MANUAL";
-    diag.innerText =
-      "El riego se encuentra encendido manualmente por el operador.";
+async function actualizarTelemetriaVivo(silencioso = false) {
+  if (
+    actualizandoAhora ||
+    typeof usuarioSesion === "undefined" ||
+    !usuarioSesion
+  ) {
     return;
   }
 
-  if (modoActualParcela === "MANUAL_OFF") {
-    banner.className =
-      "bg-slate-800 border-l-4 border-slate-500 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg";
-    badge.className =
-      "bg-slate-500/20 text-slate-400 text-xs px-2 py-0.5 rounded font-semibold";
-    badge.innerText = "RIEGO BLOQUEADO MANUAL";
-    diag.innerText =
-      "El sistema automatizado está desactivado manualmente por el operador.";
-    return;
+  actualizandoAhora = true;
+  const badgeLive = document.getElementById("badgeEstadoLive");
+  if (badgeLive && !silencioso) {
+    badgeLive.innerText = "🔄 Sincronizando...";
   }
 
-  if (temp <= 5) {
-    banner.className =
-      "bg-slate-800 border-l-4 border-blue-500 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg";
-    badge.className =
-      "bg-blue-500/20 text-blue-400 text-xs px-2 py-0.5 rounded font-semibold";
-    badge.innerText = "RIESGO DE HELADA / FRÍO EXTREMO";
-    diag.innerText =
-      "Temperatura críticamente baja. Peligro de congelamiento o estrés por frío en tejido vegetal.";
-  } else if (humSuelo < umbralActualParcela) {
-    banner.className =
-      "bg-slate-800 border-l-4 border-red-500 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg";
-    badge.className =
-      "bg-red-500/20 text-red-400 text-xs px-2 py-0.5 rounded font-semibold";
-    badge.innerText = "ESTRÉS HÍDRICO CRÍTICO";
-    diag.innerText = `Suelo seco por debajo del umbral de esta parcela (${umbralActualParcela}%). Se requiere activación de pulso de riego inmediato.`;
-  } else if (temp > 32) {
-    banner.className =
-      "bg-slate-800 border-l-4 border-amber-500 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg";
-    badge.className =
-      "bg-amber-500/20 text-amber-400 text-xs px-2 py-0.5 rounded font-semibold";
-    badge.innerText = "OLA DE CALOR DETECTADA";
-    diag.innerText =
-      "Temperatura elevada. Monitoreando tasa de evapotranspiración acelerada.";
-  } else {
-    banner.className =
-      "bg-slate-800 border-l-4 border-emerald-500 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg";
-    badge.className =
-      "bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded font-semibold";
-    badge.innerText = "CONDICIÓN ÓPTIMA";
-    diag.innerText =
-      "Parámetros microclimáticos en rangos adecuados para el cultivo.";
-  }
-}
+  try {
+    const resParcelas = await fetch(
+      "/api/parcelas?id_usuario=" + usuarioSesion.id,
+    );
+    const lista = await resParcelas.json();
+    parcelasNodos = Array.isArray(lista) ? lista : [];
 
-function actualizarUmbralUI(idParcela) {
-  const panel = document.getElementById("panelUmbral");
-  const input = document.getElementById("inputUmbral");
+    if (parcelasNodos.length === 0) {
+      mostrarEstadoSinNodos();
+      if (badgeLive) badgeLive.innerText = "⚪ Sin nodos";
+      actualizandoAhora = false;
+      return;
+    }
 
-  if (idParcela === "todas") {
-    panel.classList.add("opacity-50", "pointer-events-none");
-    input.value = "";
-    umbralActualParcela = 35;
-    modoActualParcela = "AUTO";
-    actualizarBotoneraModo("AUTO");
-    return;
-  }
+    // Consultar la telemetría de cada parcela de manera independiente en paralelo
+    const promesasTelemetria = parcelasNodos.map(async (p) => {
+      try {
+        const resTel = await fetch(`/api/telemetria?parcela_id=${p.id}`);
+        if (!resTel.ok) return { id: p.id, lecturas: [] };
+        const datos = await resTel.json();
+        return { id: p.id, lecturas: Array.isArray(datos) ? datos : [] };
+      } catch (e) {
+        return { id: p.id, lecturas: [] };
+      }
+    });
 
-  panel.classList.remove("opacity-50", "pointer-events-none");
-  const pEncontrada = listaParcelasGlobal.find((p) => p.id == idParcela);
-  if (pEncontrada) {
+    const resultados = await Promise.all(promesasTelemetria);
+    resultados.forEach((item) => {
+      lecturasPorParcela[item.id] = item.lecturas;
+    });
+
+    // Mantener selección actual o elegir la primera parcela por defecto
     if (
-      pEncontrada.umbral_humedad !== undefined &&
-      document.activeElement !== input
+      !parcelaSeleccionadaId ||
+      !parcelasNodos.some((p) => String(p.id) === String(parcelaSeleccionadaId))
     ) {
-      umbralActualParcela = parseFloat(pEncontrada.umbral_humedad);
-      input.value = umbralActualParcela;
+      parcelaSeleccionadaId = parcelasNodos[0].id;
     }
-    modoActualParcela = pEncontrada.modo_riego || "AUTO";
-    actualizarBotoneraModo(modoActualParcela);
-  }
-}
 
-async function cambiarModoRiego(nuevoModo) {
-  const idSel = document.getElementById("selectParcela").value;
-  if (idSel === "todas") {
-    alert("Selecciona una parcela específica para cambiar el modo de riego.");
-    return;
-  }
+    actualizarSelectorParcelasPanel();
+    renderizarTarjetasNodosEsp32();
+    renderizarDetalleNodoSeleccionado();
 
-  try {
-    const res = await fetch(`/api/parcelas/${idSel}/modo`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modo: nuevoModo }),
-    });
-
-    if (res.ok) {
-      modoActualParcela = nuevoModo;
-      actualizarBotoneraModo(nuevoModo);
-      await cargarListaParcelas();
-      cargarTelemetria();
+    if (badgeLive) {
+      badgeLive.className =
+        "text-[11px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-xl";
+      badgeLive.innerText = "🟢 En vivo (5s)";
     }
   } catch (err) {
-    console.error("Error al cambiar modo de riego:", err);
+    console.error("Error sincronizando sensores en vivo:", err);
+    if (badgeLive) {
+      badgeLive.className =
+        "text-[11px] font-mono bg-rose-500/15 text-rose-300 border border-rose-500/30 px-3 py-1.5 rounded-xl";
+      badgeLive.innerText = "⚠️ Sin conexión";
+    }
+  } finally {
+    actualizandoAhora = false;
   }
 }
 
-async function guardarUmbralParcela() {
-  const idSel = document.getElementById("selectParcela").value;
-  const nuevoUmbral = parseFloat(document.getElementById("inputUmbral").value);
+function mostrarEstadoSinNodos() {
+  const select = document.getElementById("selFiltroParcelaPanel");
+  const grid = document.getElementById("gridNodosEsp32");
+  const conteo = document.getElementById("lblConteoNodos");
+  const tabla = document.getElementById("tablaTelemetriaVivo");
 
-  if (idSel === "todas") {
-    alert("Selecciona una parcela específica para modificar su umbral.");
+  if (select) {
+    select.innerHTML = '<option value="">Sin parcelas registradas</option>';
+  }
+  if (conteo) {
+    conteo.innerText = "0 nodos registrados";
+  }
+  if (grid) {
+    grid.innerHTML = `
+      <div class="col-span-full bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center space-y-3">
+        <span class="text-4xl block">📡</span>
+        <h4 class="text-base font-bold text-slate-200">No hay placas ESP32 vinculadas aún</h4>
+        <p class="text-xs text-slate-400 max-w-md mx-auto">
+          Registra una parcela y asígnale su código MAC (ej. ESP32-001) en Vista de Campo para recibir sus lecturas aquí.
+        </p>
+        <div class="pt-1">
+          <a href="/parcelas.html" class="inline-flex items-center gap-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition">
+            <span>🗺️ Ir a Vista de Campo</span>
+          </a>
+        </div>
+      </div>
+    `;
+  }
+  if (tabla) {
+    tabla.innerHTML = `
+      <tr>
+        <td colspan="6" class="p-6 text-center text-slate-500">
+          Sin paquetes telemétricos registrados.
+        </td>
+      </tr>
+    `;
+  }
+}
+
+// =========================================================================
+// 2. SELECTOR Y TARJETAS INDIVIDUALES POR NODO ESP32
+// =========================================================================
+
+function actualizarSelectorParcelasPanel() {
+  const select = document.getElementById("selFiltroParcelaPanel");
+  if (!select) return;
+
+  select.innerHTML = parcelasNodos
+    .map((p) => {
+      const nombre = p.parcela || p.nombre || "Parcela #" + p.id;
+      const mac = p.codigo_mac ? ` [${p.codigo_mac}]` : " [Sin MAC]";
+      return `<option value="${p.id}">📡 ${nombre}${mac}</option>`;
+    })
+    .join("");
+
+  select.value = String(parcelaSeleccionadaId);
+}
+
+function seleccionarParcelaPanel() {
+  const select = document.getElementById("selFiltroParcelaPanel");
+  if (!select || !select.value) return;
+  parcelaSeleccionadaId = select.value;
+  renderizarTarjetasNodosEsp32();
+  renderizarDetalleNodoSeleccionado();
+}
+
+function seleccionarNodoDesdeTarjeta(id) {
+  parcelaSeleccionadaId = id;
+  const select = document.getElementById("selFiltroParcelaPanel");
+  if (select) select.value = String(id);
+  renderizarTarjetasNodosEsp32();
+  renderizarDetalleNodoSeleccionado();
+}
+
+function evaluarEstadoConexionNodo(ultimaLectura) {
+  if (!ultimaLectura || !ultimaLectura.fecha_registro) {
+    return {
+      enLinea: false,
+      etiqueta: "⚪ Sin transmisiones",
+      claseBadge: "bg-slate-700/70 text-slate-300 border-slate-600",
+      haceTexto: "Nunca",
+    };
+  }
+
+  const diffMs = Math.max(
+    0,
+    Date.now() - new Date(ultimaLectura.fecha_registro).getTime(),
+  );
+  const diffMin = Math.floor(diffMs / 60000);
+
+  if (diffMin < 5) {
+    return {
+      enLinea: true,
+      etiqueta: "🟢 En línea",
+      claseBadge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+      haceTexto: diffMin === 0 ? "Hace unos segundos" : `Hace ${diffMin} min`,
+    };
+  }
+
+  if (diffMin < 60) {
+    return {
+      enLinea: false,
+      etiqueta: "🟡 En espera",
+      claseBadge: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+      haceTexto: `Hace ${diffMin} min`,
+    };
+  }
+
+  const diffHoras = Math.floor(diffMin / 60);
+  return {
+    enLinea: false,
+    etiqueta: "🔴 Sin señal",
+    claseBadge: "bg-rose-500/20 text-rose-300 border-rose-500/40",
+    haceTexto:
+      diffHoras < 24
+        ? `Hace ${diffHoras} h`
+        : `Hace ${Math.floor(diffHoras / 24)} d`,
+  };
+}
+
+function renderizarTarjetasNodosEsp32() {
+  const grid = document.getElementById("gridNodosEsp32");
+  const conteo = document.getElementById("lblConteoNodos");
+  if (!grid) return;
+
+  let nodosEnLinea = 0;
+
+  grid.innerHTML = parcelasNodos
+    .map((p) => {
+      const lecturas = lecturasPorParcela[p.id] || [];
+      const ultima = lecturas[0] || null;
+      const estado = evaluarEstadoConexionNodo(ultima);
+      if (estado.enLinea) nodosEnLinea++;
+
+      const esSeleccionada = String(p.id) === String(parcelaSeleccionadaId);
+      const nombre = p.parcela || p.nombre || "Parcela #" + p.id;
+      const cultivo = p.cultivo || "General";
+      const mac = p.codigo_mac || "MAC NO ASIGNADA";
+      const umbral = Number(p.umbral_humedad ?? 35);
+
+      const humSuelo =
+        ultima && ultima.humedad_suelo !== undefined
+          ? Number(ultima.humedad_suelo).toFixed(1) + "%"
+          : "--";
+      const temp =
+        ultima && ultima.temperatura !== undefined
+          ? Number(ultima.temperatura).toFixed(1) + "°C"
+          : "--";
+      const humAire =
+        ultima &&
+        ultima.humedad_aire !== null &&
+        ultima.humedad_aire !== undefined
+          ? Number(ultima.humedad_aire).toFixed(0) + "%"
+          : "--";
+
+      const alertaSueloSeco = ultima && Number(ultima.humedad_suelo) < umbral;
+
+      const bordeTarjeta = esSeleccionada
+        ? "border-sky-500 ring-2 ring-sky-500/25 bg-slate-800"
+        : "border-slate-700/90 bg-slate-800/80 hover:border-slate-600";
+
+      return `
+        <div
+          onclick="seleccionarNodoDesdeTarjeta(${p.id})"
+          class="cursor-pointer rounded-2xl border ${bordeTarjeta} p-4 space-y-3.5 shadow-lg transition"
+        >
+          <!-- Cabecera Hardware -->
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-xs font-extrabold text-amber-400 bg-slate-900 px-2.5 py-0.5 rounded-lg border border-slate-700">
+                  🔌 ${mac}
+                </span>
+                ${
+                  esSeleccionada
+                    ? '<span class="text-[10px] font-bold text-sky-400 uppercase">● Inspeccionando</span>'
+                    : ""
+                }
+              </div>
+              <h4 class="text-sm font-bold text-slate-100 mt-1.5">
+                #${p.id} ${nombre}
+              </h4>
+              <p class="text-[11px] text-slate-400">🌱 ${cultivo}</p>
+            </div>
+
+            <span class="border text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 ${estado.claseBadge}">
+              ${estado.etiqueta}
+            </span>
+          </div>
+
+          <!-- Lecturas Instantáneas del Nodo -->
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="bg-slate-900/90 p-2.5 rounded-xl border ${alertaSueloSeco ? "border-rose-500/40" : "border-slate-700/70"}">
+              <span class="block text-[10px] text-slate-500 uppercase">Suelo</span>
+              <span class="text-sm font-black ${alertaSueloSeco ? "text-rose-400" : "text-emerald-400"}">
+                ${humSuelo}
+              </span>
+            </div>
+            <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-700/70">
+              <span class="block text-[10px] text-slate-500 uppercase">Temp.</span>
+              <span class="text-sm font-black text-amber-400">${temp}</span>
+            </div>
+            <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-700/70">
+              <span class="block text-[10px] text-slate-500 uppercase">Aire</span>
+              <span class="text-sm font-black text-cyan-400">${humAire}</span>
+            </div>
+          </div>
+
+          <!-- Pie Técnico -->
+          <div class="pt-2 border-t border-slate-700/60 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Último paquete: <strong class="text-slate-300">${estado.haceTexto}</strong></span>
+            <span>${lecturas.length} reg.</span>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  if (conteo) {
+    conteo.innerText = `${nodosEnLinea} de ${parcelasNodos.length} nodos en línea`;
+  }
+}
+
+// =========================================================================
+// 3. GRÁFICAS SEPARADAS Y TABLA DEL NODO SELECCIONADO
+// =========================================================================
+
+function renderizarDetalleNodoSeleccionado() {
+  const parcela =
+    parcelasNodos.find((p) => String(p.id) === String(parcelaSeleccionadaId)) ||
+    parcelasNodos[0];
+
+  if (!parcela) return;
+
+  const nombre = parcela.parcela || parcela.nombre || "Parcela #" + parcela.id;
+  const mac = parcela.codigo_mac || "Sin MAC";
+  const lecturas = lecturasPorParcela[parcela.id] || [];
+
+  const titulo = document.getElementById("lblNodoSeleccionadoTitulo");
+  if (titulo) {
+    titulo.innerHTML = `<span>📈</span> Curvas en Tiempo Real — ${nombre} <span class="font-mono text-xs text-amber-400">(${mac})</span>`;
+  }
+
+  renderizarGraficasNodo(lecturas);
+  renderizarTablaPaquetesNodo(parcela, lecturas);
+}
+
+function renderizarGraficasNodo(lecturas) {
+  const serie = lecturas.slice(0, 20).reverse();
+  const labels = serie.map((d) =>
+    new Date(d.fecha_registro).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+  );
+
+  const datosSuelo = serie.map((d) => Number(d.humedad_suelo));
+  const datosAire = serie.map((d) =>
+    d.humedad_aire !== null && d.humedad_aire !== undefined
+      ? Number(d.humedad_aire)
+      : null,
+  );
+  const datosTemp = serie.map((d) => Number(d.temperatura));
+
+  const canvasHum = document.getElementById("chartSensorHumedad");
+  const canvasTemp = document.getElementById("chartSensorTemperatura");
+
+  if (canvasHum) {
+    if (chartHumedad) chartHumedad.destroy();
+    const ctxH = canvasHum.getContext("2d");
+    const gradSuelo = ctxH.createLinearGradient(0, 0, 0, 220);
+    gradSuelo.addColorStop(0, "rgba(16, 185, 129, 0.3)");
+    gradSuelo.addColorStop(1, "rgba(16, 185, 129, 0.0)");
+
+    chartHumedad = new Chart(ctxH, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Hum. Suelo (%)",
+            data: datosSuelo,
+            borderColor: "#10b981",
+            backgroundColor: gradSuelo,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+          },
+          {
+            label: "Hum. Aire (%)",
+            data: datosAire,
+            borderColor: "#38bdf8",
+            borderDash: [5, 4],
+            tension: 0.3,
+            pointRadius: 2.5,
+            spanGaps: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { labels: { color: "#cbd5e1", font: { size: 11 } } },
+        },
+        scales: {
+          x: {
+            ticks: { color: "#94a3b8", maxRotation: 0, maxTicksLimit: 6 },
+            grid: { color: "rgba(51, 65, 85, 0.4)" },
+          },
+          y: {
+            min: 0,
+            max: 100,
+            ticks: { color: "#34d399", callback: (v) => v + "%" },
+            grid: { color: "rgba(51, 65, 85, 0.4)" },
+          },
+        },
+      },
+    });
+  }
+
+  if (canvasTemp) {
+    if (chartTemperatura) chartTemperatura.destroy();
+    const ctxT = canvasTemp.getContext("2d");
+    const gradTemp = ctxT.createLinearGradient(0, 0, 0, 220);
+    gradTemp.addColorStop(0, "rgba(245, 158, 11, 0.32)");
+    gradTemp.addColorStop(1, "rgba(245, 158, 11, 0.0)");
+
+    chartTemperatura = new Chart(ctxT, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Temperatura (°C)",
+            data: datosTemp,
+            borderColor: "#f59e0b",
+            backgroundColor: gradTemp,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointBackgroundColor: "#fbbf24",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { labels: { color: "#cbd5e1", font: { size: 11 } } },
+        },
+        scales: {
+          x: {
+            ticks: { color: "#94a3b8", maxRotation: 0, maxTicksLimit: 6 },
+            grid: { color: "rgba(51, 65, 85, 0.4)" },
+          },
+          y: {
+            suggestedMin: 10,
+            suggestedMax: 38,
+            ticks: { color: "#fbbf24", callback: (v) => v + "°C" },
+            grid: { color: "rgba(51, 65, 85, 0.4)" },
+          },
+        },
+      },
+    });
+  }
+}
+
+function renderizarTablaPaquetesNodo(parcela, lecturas) {
+  const tbody = document.getElementById("tablaTelemetriaVivo");
+  const lblTotal = document.getElementById("lblTotalPaquetes");
+  if (!tbody) return;
+
+  const recientes = lecturas.slice(0, 15);
+  if (lblTotal) {
+    lblTotal.innerText = `${recientes.length} paquetes recientes`;
+  }
+
+  if (recientes.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" class="p-6 text-center text-slate-500">
+          El nodo ${parcela.codigo_mac || "de esta parcela"} aún no ha enviado paquetes telemétricos.
+        </td>
+      </tr>
+    `;
     return;
   }
 
-  if (isNaN(nuevoUmbral) || nuevoUmbral < 5 || nuevoUmbral > 90) {
-    alert("Ingresa un porcentaje de humedad válido (entre 5% y 90%).");
-    return;
-  }
+  const nombre = parcela.parcela || parcela.nombre || "Parcela #" + parcela.id;
+  const mac = parcela.codigo_mac || "Sin MAC";
+  const umbral = Number(parcela.umbral_humedad ?? 35);
 
-  try {
-    const res = await fetch(`/api/parcelas/${idSel}/umbral`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ umbral: nuevoUmbral }),
-    });
-
-    if (res.ok) {
-      alert(
-        `✅ Umbral para la Parcela #${idSel} actualizado a ${nuevoUmbral}%`,
-      );
-      umbralActualParcela = nuevoUmbral;
-      await cargarListaParcelas();
-      cargarTelemetria();
-    }
-  } catch (err) {
-    console.error("Error al guardar umbral:", err);
-  }
-}
-
-async function cargarListaParcelas() {
-  try {
-    const res = await fetch(`/api/parcelas?id_usuario=${usuarioSesion.id}`);
-    listaParcelasGlobal = await res.json();
-
-    const vEmpty = document.getElementById("vistaEmptyState");
-    const vDash = document.getElementById("contenedorDashboard");
-
-    if (!listaParcelasGlobal || listaParcelasGlobal.length === 0) {
-      vEmpty.classList.remove("hidden");
-      vDash.classList.add("hidden");
-      return;
-    } else {
-      vEmpty.classList.add("hidden");
-      vDash.classList.remove("hidden");
-    }
-
-    const select = document.getElementById("selectParcela");
-    const valPrevio = select.value;
-    select.innerHTML = '<option value="todas">🌐 Todas las Parcelas</option>';
-
-    listaParcelasGlobal.forEach((p) => {
-      select.innerHTML += `<option value="${p.id}">📍 Parcela ${p.id}: ${p.parcela || p.nombre || "Sector"}</option>`;
-
-      const latVal = parseFloat(p.latitud) || -12.6581;
-      const lngVal = parseFloat(p.longitud) || -76.6321;
-
-      if (!marcadoresMapa[p.id]) {
-        marcadoresMapa[p.id] = L.marker([latVal, lngVal])
-          .addTo(map)
-          .bindPopup(
-            `<b>${p.parcela || p.nombre || "Parcela " + p.id}</b><br>Cultivo: ${p.cultivo || "General"}`,
-          );
-      }
-    });
-
-    if (valPrevio) select.value = valPrevio;
-  } catch (e) {
-    console.error("Error al obtener lista de parcelas:", e);
-  }
-}
-
-function agruparSeriePorVentana(registros, ventanaMs = 5000) {
-  const buckets = new Map();
-
-  registros.forEach((d) => {
-    const ts = new Date(d.fecha_registro).getTime();
-    const clave = Math.floor(ts / ventanaMs) * ventanaMs;
-
-    if (!buckets.has(clave)) {
-      buckets.set(clave, {
-        ts: clave,
-        sumTemp: 0,
-        sumHumSuelo: 0,
-        sumHumAire: 0,
-        countTemp: 0,
-        countHumSuelo: 0,
-        countHumAire: 0,
+  tbody.innerHTML = recientes
+    .map((reg) => {
+      const fechaStr = new Date(reg.fecha_registro).toLocaleString([], {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
       });
-    }
+      const humSuelo = Number(reg.humedad_suelo);
+      const bajoUmbral = humSuelo < umbral;
 
-    const b = buckets.get(clave);
-    const t = parseFloat(d.temperatura);
-    const hs = parseFloat(d.humedad_suelo);
-    const ha =
-      d.humedad_aire !== null && d.humedad_aire !== undefined
-        ? parseFloat(d.humedad_aire)
-        : NaN;
-
-    if (!isNaN(t)) {
-      b.sumTemp += t;
-      b.countTemp++;
-    }
-    if (!isNaN(hs)) {
-      b.sumHumSuelo += hs;
-      b.countHumSuelo++;
-    }
-    if (!isNaN(ha)) {
-      b.sumHumAire += ha;
-      b.countHumAire++;
-    }
-  });
-
-  return Array.from(buckets.values())
-    .sort((a, b) => a.ts - b.ts)
-    .map((b) => ({
-      fecha_registro: new Date(b.ts).toISOString(),
-      temperatura:
-        b.countTemp > 0 ? Number((b.sumTemp / b.countTemp).toFixed(1)) : null,
-      humedad_suelo:
-        b.countHumSuelo > 0
-          ? Number((b.sumHumSuelo / b.countHumSuelo).toFixed(1))
-          : null,
-      humedad_aire:
-        b.countHumAire > 0
-          ? Number((b.sumHumAire / b.countHumAire).toFixed(1))
-          : null,
-    }));
-}
-
-async function cargarTelemetria() {
-  try {
-    const idSel = document.getElementById("selectParcela").value;
-    actualizarUmbralUI(idSel);
-
-    if (idSel !== "todas") {
-      const pSel = listaParcelasGlobal.find((p) => p.id == idSel);
-      if (pSel && pSel.latitud && pSel.longitud) {
-        map.setView([parseFloat(pSel.latitud), parseFloat(pSel.longitud)], 14);
-        if (marcadoresMapa[idSel]) marcadoresMapa[idSel].openPopup();
-      }
-    } else {
-      map.setView([-12.6581, -76.6321], 12);
-    }
-
-    const res = await fetch(`/api/telemetria?parcela_id=${idSel}`);
-    const datos = await res.json();
-
-    if (!datos || datos.length === 0) {
-      document.getElementById("valTemp").innerText = "-- °C";
-      document.getElementById("valHumSuelo").innerText = "-- %";
-      document.getElementById("valHumAire").innerText = "-- %";
-      document.getElementById("lblParcela").innerText = "Parcela: Sin datos";
-      document.getElementById("lblCultivo").innerText = "Cultivo: --";
-      document.getElementById("lblMac").innerText = "Nodo: --";
-      document.getElementById("tablaCuerpo").innerHTML =
-        '<tr><td colspan="7" class="p-4 text-center text-slate-500">No hay registros de telemetría para la selección actual</td></tr>';
-      chartTelemetria.data.labels = [];
-      chartTelemetria.data.datasets.forEach((ds) => (ds.data = []));
-      chartTelemetria.update();
-      return;
-    }
-
-    const u = datos[0];
-    const nodosUnicosEnDatos = new Set(datos.map((d) => d.codigo_mac)).size;
-
-    document.getElementById("valTemp").innerText = `${u.temperatura} °C`;
-    document.getElementById("valHumSuelo").innerText = `${u.humedad_suelo} %`;
-    document.getElementById("valHumAire").innerText =
-      `${u.humedad_aire ?? "--"} %`;
-    document.getElementById("lblParcela").innerText =
-      `Parcela: ${u.parcela || "N/A"}`;
-    document.getElementById("lblCultivo").innerText =
-      `Cultivo: ${u.cultivo || "N/A"}`;
-    document.getElementById("lblMac").innerText =
-      nodosUnicosEnDatos > 1
-        ? `Nodos activos: ${nodosUnicosEnDatos} (último: ${u.codigo_mac})`
-        : `Nodo: ${u.codigo_mac}`;
-
-    evaluarRiesgoClimatico(u.temperatura, u.humedad_suelo);
-
-    const badgeRiego = document.getElementById("badgeRiego");
-    if (badgeRiego) {
-      let activo = false;
-      if (modoActualParcela === "MANUAL_ON") activo = true;
-      else if (modoActualParcela === "MANUAL_OFF") activo = false;
-      else activo = parseFloat(u.humedad_suelo) < umbralActualParcela;
-
-      if (activo) {
-        badgeRiego.className =
-          "inline-flex items-center gap-1.5 bg-cyan-500/20 text-cyan-400 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-cyan-500/30 animate-pulse";
-        badgeRiego.innerHTML = "💧 Riego Activo";
-      } else {
-        badgeRiego.className =
-          "inline-flex items-center gap-1.5 bg-slate-700 text-slate-400 text-xs px-2.5 py-0.5 rounded-full font-semibold";
-        badgeRiego.innerHTML = "🛑 Riego Inactivo";
-      }
-    }
-
-    const tabla = document.getElementById("tablaCuerpo");
-    tabla.innerHTML = "";
-    datos.slice(0, 10).forEach((row) => {
-      tabla.innerHTML += `
-        <tr class="hover:bg-slate-750 transition">
-          <td class="p-3 font-mono text-sky-400">#${row.id}</td>
-          <td class="p-3 font-semibold">${row.codigo_mac}</td>
-          <td class="p-3 text-slate-400">${row.parcela} (${row.cultivo})</td>
-          <td class="p-3 font-bold text-amber-400">${row.temperatura} °C</td>
-          <td class="p-3 font-bold text-emerald-400">${row.humedad_suelo} %</td>
-          <td class="p-3 font-bold text-cyan-400">${row.humedad_aire ?? "--"} %</td>
-          <td class="p-3 text-xs text-slate-400">${new Date(row.fecha_registro).toLocaleString()}</td>
+      return `
+        <tr class="hover:bg-slate-700/40 transition">
+          <td class="p-3 font-mono text-slate-400">${fechaStr}</td>
+          <td class="p-3 font-semibold text-slate-200">
+            ${nombre} <span class="font-mono text-[11px] text-amber-400">(${mac})</span>
+          </td>
+          <td class="p-3 font-mono font-bold ${bajoUmbral ? "text-rose-400" : "text-emerald-400"}">
+            ${humSuelo.toFixed(1)} %
+          </td>
+          <td class="p-3 font-mono text-amber-300">
+            ${Number(reg.temperatura).toFixed(1)} °C
+          </td>
+          <td class="p-3 font-mono text-cyan-300">
+            ${reg.humedad_aire !== null && reg.humedad_aire !== undefined ? Number(reg.humedad_aire).toFixed(0) + " %" : "--"}
+          </td>
+          <td class="p-3 text-right">
+            ${
+              bajoUmbral
+                ? `<span class="bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full">⚠️ Suelo Seco (<${umbral}%)</span>`
+                : `<span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full">✅ Óptimo</span>`
+            }
+          </td>
         </tr>
       `;
-    });
-
-    const serieHistoria =
-      nodosUnicosEnDatos > 1
-        ? agruparSeriePorVentana(datos, 5000).slice(-12)
-        : datos.slice(0, 12).reverse();
-
-    chartTelemetria.data.labels = serieHistoria.map((d) =>
-      new Date(d.fecha_registro).toLocaleTimeString(),
-    );
-    chartTelemetria.data.datasets[0].data = serieHistoria.map(
-      (d) => d.temperatura,
-    );
-    chartTelemetria.data.datasets[1].data = serieHistoria.map(
-      (d) => d.humedad_suelo,
-    );
-    chartTelemetria.data.datasets[2].data = serieHistoria.map(
-      (d) => d.humedad_aire,
-    );
-    chartTelemetria.update();
-  } catch (err) {
-    console.error("Error al obtener telemetría:", err);
-  }
+    })
+    .join("");
 }
-
-cargarListaParcelas().then(() => cargarTelemetria());
-setInterval(cargarTelemetria, 5000);

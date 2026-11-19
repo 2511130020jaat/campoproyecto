@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASIR - Gestor de Parcelas y Contornos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/gestion-parcelas.js" defer></script>
+  </head>
+  <body class="bg-slate-900 text-slate-100 font-sans flex min-h-screen">
+    <div id="sidebar-container"></div>
+
+    <main class="flex-grow p-4 md:p-6 space-y-8 min-w-0">
+      <!-- Encabezado -->
+      <header
+        class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700/80 pb-4"
+      >
+        <div class="flex items-center gap-3">
+          <button id="btnMenu" class="lg:hidden text-2xl text-slate-300">
+            ☰
+          </button>
+          <div>
+            <h2 class="text-xl font-bold text-sky-400">
+              🧭 Gestor de Parcelas y Contornos
+            </h2>
+            <p class="text-xs text-slate-400">
+              Crea campos generales, delimita los vértices satelitales de cada
+              parcela y administra tus nodos IoT
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+          <a
+            href="/parcelas.html"
+            class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2"
+          >
+            <span>🗺️</span> Vista de Campo
+          </a>
+          <button
+            type="button"
+            onclick="prepararNuevaParcela()"
+            class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-lg flex items-center gap-2"
+          >
+            <span>➕</span> Nueva Parcela
+          </button>
+        </div>
+      </header>
+
+      <!-- BLOQUE 1: EDITOR SATELITAL DE CONTORNOS -->
+      <section class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3
+              class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2"
+            >
+              <span>🛰️</span> Editor Satelital de Vértices
+            </h3>
+            <p class="text-xs text-slate-400">
+              Haz clic en las esquinas del terreno para trazar el perímetro o
+              arrastra los puntos verdes para ajustar con precisión
+            </p>
+          </div>
+          <span
+            id="estadoEditorMapa"
+            class="text-xs font-semibold text-emerald-400"
+          >
+            Modo: Trazado de contorno activo
+          </span>
+        </div>
+
+        <div
+          class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl"
+        >
+          <div
+            class="p-3.5 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 bg-slate-800/95"
+          >
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                id="btnModoPoligono"
+                onclick="cambiarModoMapa('POLIGONO')"
+                class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition shadow"
+              >
+                ✏️ Marcar Contorno
+              </button>
+              <button
+                type="button"
+                id="btnModoPunto"
+                onclick="cambiarModoMapa('PUNTO')"
+                class="bg-slate-900 text-slate-300 hover:text-white border border-slate-700 text-xs px-3 py-1.5 rounded-lg font-semibold transition"
+              >
+                📍 Solo Punto
+              </button>
+              <button
+                type="button"
+                onclick="deshacerUltimoVertice()"
+                class="bg-slate-900 hover:bg-slate-700 text-amber-300 border border-slate-700 text-xs px-2.5 py-1.5 rounded-lg font-semibold transition"
+              >
+                ↩️ Deshacer
+              </button>
+              <button
+                type="button"
+                onclick="limpiarPoligonoActual()"
+                class="bg-slate-900 hover:bg-rose-500/20 text-rose-300 border border-slate-700 text-xs px-2.5 py-1.5 rounded-lg font-semibold transition"
+              >
+                🧹 Limpiar Borde
+              </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                onclick="centrarEnParcelasGuardadas()"
+                class="bg-slate-900 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs px-3 py-1.5 rounded-lg font-semibold transition"
+              >
+                🎯 Ver Todas
+              </button>
+              <button
+                type="button"
+                id="btnCapaMapa"
+                onclick="alternarCapaMapa()"
+                class="bg-slate-900 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs px-3 py-1.5 rounded-lg font-semibold transition"
+              >
+                🗺️ Vista Calles
+              </button>
+            </div>
+          </div>
+
+          <div id="mapaGestionParcelas" class="w-full h-[390px] z-10"></div>
+        </div>
+      </section>
+
+      <hr class="border-slate-800" />
+
+      <!-- BLOQUE 2: FORMULARIO DE REGISTRO Y EDICIÓN -->
+      <section id="seccionFormularioParcela" class="space-y-4">
+        <div>
+          <h3
+            id="formTitulo"
+            class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2"
+          >
+            <span>➕</span> Registrar Nueva Parcela
+          </h3>
+          <p class="text-xs text-slate-400">
+            Agrupa varias parcelas bajo un mismo <strong>Campo General</strong>
+            (Fundo) o déjalo vacío si es un lote independiente
+          </p>
+        </div>
+
+        <form
+          id="formGestionParcela"
+          onsubmit="guardarParcela(event)"
+          class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl grid grid-cols-1 lg:grid-cols-3 gap-6"
+        >
+          <input type="hidden" id="editParcelaId" value="" />
+
+          <!-- Columna 1: Jerarquía e Identificación -->
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs font-semibold text-amber-300 mb-1">
+                🏡 Campo General / Fundo (Opcional)
+              </label>
+              <input
+                type="text"
+                id="txtCampoGeneral"
+                list="datalistCamposGenerales"
+                placeholder="Ej. Fundo San Isidro (o selecciona existente)"
+                class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 focus:outline-none focus:border-amber-400"
+              />
+              <datalist id="datalistCamposGenerales"></datalist>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">
+                🌱 Nombre de la Parcela / Sector *
+              </label>
+              <input
+                type="text"
+                id="txtNombreParcela"
+                required
+                placeholder="Ej. Lote Norte - Paltos"
+                class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">
+                Tipo de Cultivo
+              </label>
+              <input
+                type="text"
+                id="txtCultivo"
+                placeholder="Ej. Palto Hass, Vid, Maíz, Hortalizas"
+                class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+          </div>
+
+          <!-- Columna 2: Métricas Calculadas del Contorno -->
+          <div
+            class="bg-slate-900/90 p-4 rounded-xl border border-emerald-500/30 flex flex-col justify-between space-y-3"
+          >
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-emerald-400">
+                📐 Geometría del Polígono
+              </span>
+              <span
+                id="badgeVertices"
+                class="text-[11px] font-mono bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded"
+              >
+                0 vértices
+              </span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5 text-xs">
+              <div class="bg-slate-800/90 p-3 rounded-lg">
+                <span class="block text-[10px] text-slate-400">
+                  Área Calculada
+                </span>
+                <span
+                  id="lblAreaParcela"
+                  class="font-mono font-bold text-emerald-400 text-sm"
+                >
+                  0 m² (0.00 ha)
+                </span>
+              </div>
+              <div class="bg-slate-800/90 p-3 rounded-lg">
+                <span class="block text-[10px] text-slate-400">Perímetro</span>
+                <span
+                  id="lblPerimetroParcela"
+                  class="font-mono font-bold text-slate-100 text-sm"
+                >
+                  0.0 m
+                </span>
+              </div>
+            </div>
+
+            <div class="bg-slate-800/60 px-3 py-2 rounded-lg text-[11px]">
+              <span class="text-slate-400">Dimensiones aproximadas: </span>
+              <span
+                id="lblDimensionesParcela"
+                class="font-mono font-bold text-slate-200"
+              >
+                --
+              </span>
+            </div>
+
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              Necesitas al menos <strong>3 vértices</strong> en el mapa para
+              guardar un polígono cerrado. Si cambias a "Solo Punto", se
+              guardará únicamente la coordenada central.
+            </p>
+          </div>
+
+          <!-- Columna 3: Sensor Principal, Coordenadas y Guardado -->
+          <div class="flex flex-col justify-between space-y-4">
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-semibold text-sky-400 mb-1">
+                  📡 Código MAC ESP32 Principal (Opcional)
+                </label>
+                <input
+                  type="text"
+                  id="txtMacESP32"
+                  placeholder="Ej. ESP32-001"
+                  class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 font-mono focus:outline-none focus:border-sky-500"
+                />
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label
+                    class="block text-xs font-semibold text-slate-400 mb-1"
+                  >
+                    Latitud Centro
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    id="txtLatitud"
+                    oninput="actualizarMarcadorDesdeInputs()"
+                    placeholder="-12.6581"
+                    class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 font-mono focus:outline-none focus:border-sky-500"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="block text-xs font-semibold text-slate-400 mb-1"
+                  >
+                    Longitud Centro
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    id="txtLongitud"
+                    oninput="actualizarMarcadorDesdeInputs()"
+                    placeholder="-76.6321"
+                    class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 font-mono focus:outline-none focus:border-sky-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="flex gap-2 pt-2">
+              <button
+                type="submit"
+                id="btnGuardarParcela"
+                class="flex-grow bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg"
+              >
+                💾 Guardar Parcela
+              </button>
+              <button
+                type="button"
+                id="btnCancelarEdicion"
+                onclick="cancelarEdicion()"
+                class="hidden bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold px-4 py-3 rounded-xl text-xs transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <hr class="border-slate-800" />
+
+      <!-- BLOQUE 3: TABLA ADMINISTRATIVA DE PARCELAS -->
+      <section class="space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3
+              class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2"
+            >
+              <span>📋</span> Parcelas Registradas
+            </h3>
+            <p class="text-xs text-slate-400">
+              Edita los límites, reasigna el Campo General o elimina sectores
+              registrados
+            </p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              id="txtBuscarParcela"
+              oninput="renderizarTablaGestion()"
+              placeholder="🔍 Buscar parcela, cultivo o MAC..."
+              class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-sky-500"
+            />
+            <select
+              id="selFiltroCampoGestion"
+              onchange="renderizarTablaGestion()"
+              class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 font-semibold focus:outline-none focus:border-sky-500"
+            >
+              <option value="TODOS">Todos los campos</option>
+            </select>
+            <span
+              id="contadorGestionParcelas"
+              class="text-xs font-bold text-sky-400 pl-2"
+            >
+              0 parcelas
+            </span>
+          </div>
+        </div>
+
+        <div
+          class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl"
+        >
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr
+                  class="bg-slate-900/90 border-b border-slate-700 text-[11px] uppercase text-slate-400"
+                >
+                  <th class="p-3.5">ID</th>
+                  <th class="p-3.5">Campo General</th>
+                  <th class="p-3.5">Parcela / Cultivo</th>
+                  <th class="p-3.5">Superficie y Contorno</th>
+                  <th class="p-3.5">Sensores MAC</th>
+                  <th class="p-3.5">Modo Riego</th>
+                  <th class="p-3.5 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody
+                id="tablaGestionParcelas"
+                class="divide-y divide-slate-700/70"
+              >
+                <tr>
+                  <td colspan="7" class="p-6 text-center text-slate-500">
+                    Cargando parcelas registradas...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

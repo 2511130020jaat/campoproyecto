@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASIR - Pronóstico y Alertas Climáticas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/clima.js" defer></script>
+  </head>
+  <body class="bg-slate-900 text-slate-100 font-sans flex min-h-screen">
+    <div id="sidebar-container"></div>
+
+    <main class="flex-grow p-4 md:p-6 space-y-8 min-w-0">
+      <!-- Encabezado y Selector de Campo -->
+      <header
+        class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700/80 pb-4"
+      >
+        <div class="flex items-center gap-3">
+          <button id="btnMenu" class="lg:hidden text-2xl text-slate-300">
+            ☰
+          </button>
+          <div>
+            <h2 class="text-xl font-bold text-sky-400">
+              🌦️ Pronóstico y Alertas Climáticas
+            </h2>
+            <p class="text-xs text-slate-400">
+              Vigilancia oficial ENFEN / SENAMHI y pronóstico horario detallado
+              para tus parcelas
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+          <label
+            for="selParcelaClima"
+            class="text-xs font-semibold text-slate-400"
+            >Campo:</label
+          >
+          <select
+            id="selParcelaClima"
+            onchange="cambiarParcelaClima()"
+            class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3.5 py-2 font-semibold focus:outline-none focus:border-sky-500"
+          >
+            <option value="">Cargando campos...</option>
+          </select>
+
+          <button
+            type="button"
+            onclick="cargarDatosClima()"
+            title="Actualizar pronóstico"
+            class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition"
+          >
+            🔄
+          </button>
+        </div>
+      </header>
+
+      <!-- BLOQUE 1: VIGILANCIA CLIMÁTICA OFICIAL (ENFEN Y SENAMHI - PERÚ) -->
+      <section class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3
+            class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2"
+          >
+            <span>🇵🇪</span> Vigilancia Climática Oficial (Instituciones del
+            Perú)
+          </h3>
+          <span class="text-[11px] text-slate-500"
+            >Señales regionales de riesgo para planificación agrícola</span
+          >
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <!-- Tarjeta ENFEN -->
+          <div
+            class="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 flex flex-col justify-between gap-4 shadow-lg"
+          >
+            <div class="space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5">
+                  <span
+                    class="bg-sky-500/15 text-sky-400 border border-sky-500/30 font-extrabold text-xs px-2.5 py-1 rounded-lg"
+                    >ENFEN</span
+                  >
+                  <h4 class="text-sm font-bold text-slate-100">
+                    Fenómeno El Niño / La Niña
+                  </h4>
+                </div>
+                <span
+                  id="badgeEstadoEnfen"
+                  class="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold px-2.5 py-0.5 rounded-full"
+                >
+                  ● Condiciones Neutras
+                </span>
+              </div>
+              <p
+                id="txtResumenEnfen"
+                class="text-xs text-slate-400 leading-relaxed"
+              >
+                Monitoreo térmico del mar peruano y anomalías atmosféricas en la
+                costa. Sin anomalías extremas de temperatura superficial
+                detectadas para la zona.
+              </p>
+            </div>
+
+            <div
+              class="pt-2 border-t border-slate-700/70 flex items-center justify-between text-[11px]"
+            >
+              <span class="text-slate-500"
+                >Comité Multisectorial ENFEN (IMARPE / SENAMHI)</span
+              >
+              <a
+                href="https://enfen.imarpe.gob.pe/"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-sky-400 hover:text-sky-300 font-bold transition"
+              >
+                Comunicado oficial ↗
+              </a>
+            </div>
+          </div>
+
+          <!-- Tarjeta SENAMHI -->
+          <div
+            class="bg-slate-800/90 border border-slate-700 rounded-2xl p-5 flex flex-col justify-between gap-4 shadow-lg"
+          >
+            <div class="space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5">
+                  <span
+                    class="bg-amber-500/15 text-amber-400 border border-amber-500/30 font-extrabold text-xs px-2.5 py-1 rounded-lg"
+                    >SENAMHI</span
+                  >
+                  <h4 class="text-sm font-bold text-slate-100">
+                    Avisos Meteorológicos y Agrometeorología
+                  </h4>
+                </div>
+                <span
+                  id="badgeEstadoSenamhi"
+                  class="bg-sky-500/15 text-sky-300 border border-sky-500/30 text-[11px] font-bold px-2.5 py-0.5 rounded-full"
+                >
+                  ● Vigilancia Activa
+                </span>
+              </div>
+              <p
+                id="txtResumenSenamhi"
+                class="text-xs text-slate-400 leading-relaxed"
+              >
+                Seguimiento de radiación UV, ráfagas de viento, descensos
+                nocturnos de temperatura y episodios de lluvia en valles
+                agrícolas.
+              </p>
+            </div>
+
+            <div
+              class="pt-2 border-t border-slate-700/70 flex items-center justify-between text-[11px]"
+            >
+              <span class="text-slate-500"
+                >Servicio Nacional de Meteorología e Hidrología</span
+              >
+              <a
+                href="https://www.senamhi.gob.pe/?p=aviso-meteorologico"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-amber-400 hover:text-amber-300 font-bold transition"
+              >
+                Ver avisos vigentes ↗
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr class="border-slate-800" />
+
+      <!-- BLOQUE 2: RECOMENDACIÓN DE RIEGO Y MÉTRICAS DEL DÍA -->
+      <section class="space-y-4">
+        <div
+          id="bannerRecomendacionClima"
+          class="bg-slate-800 border-l-4 border-emerald-500 p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl"
+        >
+          <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs font-bold uppercase text-slate-400"
+                >Consejo Práctico de Riego</span
+              >
+              <span
+                id="badgeDecisionClima"
+                class="bg-emerald-500/20 text-emerald-300 text-xs px-2.5 py-0.5 rounded-full font-bold"
+              >
+                CONDICIÓN ESTABLE
+              </span>
+            </div>
+            <h3
+              id="txtConsejoRiegoClima"
+              class="text-sm sm:text-base font-bold text-slate-100"
+            >
+              Analizando condiciones horarias de tu campo...
+            </h3>
+          </div>
+
+          <a
+            href="/riego.html"
+            class="shrink-0 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-lg"
+          >
+            💧 Ir a Control de Riego →
+          </a>
+        </div>
+
+        <!-- 4 KPIs climáticos rápidos -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            class="bg-slate-800 p-4 rounded-2xl border border-slate-700 flex items-center justify-between"
+          >
+            <div>
+              <p class="text-[11px] text-slate-400 uppercase font-semibold">
+                Temperatura Actual
+              </p>
+              <p
+                id="kpiTempActual"
+                class="text-2xl font-black text-amber-400 mt-0.5"
+              >
+                -- °C
+              </p>
+            </div>
+            <span class="text-3xl bg-amber-500/10 p-2.5 rounded-xl">🌡️</span>
+          </div>
+
+          <div
+            class="bg-slate-800 p-4 rounded-2xl border border-slate-700 flex items-center justify-between"
+          >
+            <div>
+              <p class="text-[11px] text-slate-400 uppercase font-semibold">
+                Mínima / Máxima Hoy
+              </p>
+              <p
+                id="kpiTempRango"
+                class="text-xl font-black text-slate-100 mt-0.5"
+              >
+                --° / --°
+              </p>
+            </div>
+            <span class="text-3xl bg-orange-500/10 p-2.5 rounded-xl">☀️</span>
+          </div>
+
+          <div
+            class="bg-slate-800 p-4 rounded-2xl border border-slate-700 flex items-center justify-between"
+          >
+            <div>
+              <p class="text-[11px] text-slate-400 uppercase font-semibold">
+                Lluvia Próximas 6h
+              </p>
+              <p
+                id="kpiLluvia6h"
+                class="text-2xl font-black text-sky-400 mt-0.5"
+              >
+                -- %
+              </p>
+            </div>
+            <span class="text-3xl bg-sky-500/10 p-2.5 rounded-xl">🌧️</span>
+          </div>
+
+          <div
+            class="bg-slate-800 p-4 rounded-2xl border border-slate-700 flex items-center justify-between"
+          >
+            <div>
+              <p class="text-[11px] text-slate-400 uppercase font-semibold">
+                Viento / Evap. (ET0)
+              </p>
+              <p
+                id="kpiEt0Viento"
+                class="text-lg font-black text-cyan-400 mt-0.5"
+              >
+                -- km/h
+              </p>
+            </div>
+            <span class="text-3xl bg-cyan-500/10 p-2.5 rounded-xl">💨</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- BLOQUE 3: FRANJA HORARIA VISUAL (LECTURA EN 3 SEGUNDOS) -->
+      <section class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3
+            class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2"
+          >
+            <span>🕒</span> Evolución por Horas (Hoy)
+          </h3>
+          <span class="text-xs text-slate-400"
+            >Temperatura, probabilidad de lluvia y milímetros esperados</span
+          >
+        </div>
+
+        <div
+          id="gridTarjetasHorarias"
+          class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3"
+        >
+          <div class="col-span-full text-xs text-slate-500 py-4">
+            Cargando franja horaria...
+          </div>
+        </div>
+      </section>
+
+      <!-- BLOQUE 4: DOS GRÁFICAS SEPARADAS Y CLARAS (24 HORAS) -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Gráfica A: Solo Temperatura -->
+        <div
+          class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl space-y-3"
+        >
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-sm font-bold text-amber-400">
+                🌡️ Curva de Temperatura (Próximas 24h)
+              </h4>
+              <p class="text-[11px] text-slate-400">
+                Identifica las horas de mayor calor y evaporación
+              </p>
+            </div>
+          </div>
+          <div class="relative h-[230px] w-full">
+            <canvas id="chartTemperatura24h"></canvas>
+          </div>
+        </div>
+
+        <!-- Gráfica B: Solo Lluvia -->
+        <div
+          class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl space-y-3"
+        >
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-sm font-bold text-sky-400">
+                💧 Probabilidad de Lluvia (Próximas 24h)
+              </h4>
+              <p class="text-[11px] text-slate-400">
+                Escala real de 0% a 100% (bloquea riego automático sobre 65%)
+              </p>
+            </div>
+          </div>
+          <div class="relative h-[230px] w-full">
+            <canvas id="chartLluvia24h"></canvas>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
