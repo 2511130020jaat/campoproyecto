@@ -101,6 +101,66 @@ async function cargarListaParcelasFiltro() {
   }
 }
 
+function tieneDatosParaCategoria(cat = categoriaSeleccionada) {
+  const nParc = (datosReporte.ingenieria || []).length;
+  const nTel = (datosReporte.telemetria || []).length;
+  const nProg = (datosReporte.programaciones || []).length;
+  const nRiego = (datosReporte.historial_riego || []).length;
+
+  if (cat === "ingenieria") return nParc > 0;
+  if (cat === "telemetria") return nTel > 0;
+  if (cat === "riego") return nProg > 0 || nRiego > 0;
+  return nParc > 0 || nTel > 0 || nProg > 0 || nRiego > 0;
+}
+
+function actualizarEstadoExportacion() {
+  const badge = document.getElementById("badgeEstadoPaquete");
+  const nParc = (datosReporte.ingenieria || []).length;
+  const nTel = (datosReporte.telemetria || []).length;
+  const nProg = (datosReporte.programaciones || []).length;
+  const nRiego = (datosReporte.historial_riego || []).length;
+  const disponible = tieneDatosParaCategoria(categoriaSeleccionada);
+
+  if (badge) {
+    if (nParc === 0 && nTel === 0 && nProg === 0 && nRiego === 0) {
+      badge.className =
+        "inline-flex items-center gap-1.5 bg-amber-500/10 text-amber-300 border border-amber-500/30 text-xs px-3 py-1 rounded-full font-semibold";
+      badge.innerText =
+        "⚠️ Sin registros disponibles — Crea una parcela para generar reportes";
+    } else if (!disponible) {
+      badge.className =
+        "inline-flex items-center gap-1.5 bg-amber-500/10 text-amber-300 border border-amber-500/30 text-xs px-3 py-1 rounded-full font-semibold";
+      badge.innerText = `⚠️ Sin datos en esta categoría (${nParc} parcelas • ${nTel} lecturas • ${nRiego} eventos)`;
+    } else {
+      badge.className =
+        "inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs px-3 py-1 rounded-full font-semibold";
+      badge.innerText = `✓ Listo para compilar (${nParc} parcelas • ${nTel} lecturas • ${nRiego} eventos)`;
+    }
+  }
+
+  const botonesExport = document.querySelectorAll(
+    'button[onclick*="generarPDF"], button[onclick*="exportarExcel"], button[onclick*="exportarCSV"]',
+  );
+  botonesExport.forEach((btn) => {
+    btn.disabled = !disponible;
+    if (!disponible) {
+      btn.classList.add(
+        "opacity-40",
+        "cursor-not-allowed",
+        "pointer-events-none",
+      );
+      btn.title = "Registra datos antes de exportar este informe";
+    } else {
+      btn.classList.remove(
+        "opacity-40",
+        "cursor-not-allowed",
+        "pointer-events-none",
+      );
+      btn.title = "";
+    }
+  });
+}
+
 function seleccionarCategoria(cat) {
   categoriaSeleccionada = cat;
 
@@ -152,6 +212,10 @@ function seleccionarCategoria(cat) {
   document.getElementById("listaCapitulosDoc").innerHTML = info.items
     .map((txt) => `<li>${txt}</li>`)
     .join("");
+
+  if (datosCargados) {
+    actualizarEstadoExportacion();
+  }
 }
 
 async function cargarDatosReporte() {
@@ -175,14 +239,7 @@ async function cargarDatosReporte() {
     const res = await fetch("/api/reportes/consolidado?" + params.toString());
     datosReporte = await res.json();
     datosCargados = true;
-
-    const nParc = (datosReporte.ingenieria || []).length;
-    const nTel = (datosReporte.telemetria || []).length;
-    const nRiego = (datosReporte.historial_riego || []).length;
-
-    if (badge) {
-      badge.innerText = `✓ Listo para compilar (${nParc} parcelas • ${nTel} lecturas • ${nRiego} eventos)`;
-    }
+    actualizarEstadoExportacion();
   } catch (err) {
     console.error("Error cargando datos del reporte:", err);
     if (badge) badge.innerText = "⚠️ Error al sincronizar datos";
@@ -251,6 +308,11 @@ async function generarPDF(accion = "abrir") {
 
   if (!datosCargados) {
     await cargarDatosReporte();
+  }
+
+  if (!tieneDatosParaCategoria(categoriaSeleccionada)) {
+    alert("No hay registros disponibles para generar este reporte.");
+    return;
   }
 
   const { jsPDF } = window.jspdf;
@@ -585,6 +647,11 @@ async function exportarExcel() {
     await cargarDatosReporte();
   }
 
+  if (!tieneDatosParaCategoria("integral")) {
+    alert("No hay registros disponibles para exportar a Excel.");
+    return;
+  }
+
   const wb = XLSX.utils.book_new();
 
   const hojaTel = XLSX.utils.json_to_sheet(
@@ -635,6 +702,11 @@ async function exportarExcel() {
 async function exportarCSV() {
   if (!datosCargados) {
     await cargarDatosReporte();
+  }
+
+  if (!tieneDatosParaCategoria("telemetria")) {
+    alert("No hay lecturas de telemetría disponibles para exportar a CSV.");
+    return;
   }
 
   const filas = datosReporte.telemetria || [];

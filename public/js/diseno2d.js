@@ -86,8 +86,15 @@ async function cargarParcelasDiseno() {
 
     if (!parcelasDisponibles || parcelasDisponibles.length === 0) {
       select.innerHTML = '<option value="">Sin parcelas registradas</option>';
-      generarPlantillaEjemplo();
-      resetearVistaCanvas(true);
+      nodosPlano = [];
+      contornoMetros = [];
+      aristasPvc = [];
+      aristasMesh = [];
+      sateliteAutoCanvas = null;
+      sateliteAutoBoundsM = null;
+      aplicarOrtofotoEnUI(null);
+      resetearVistaCanvas(false);
+      recalcularYRedibujar();
       return;
     }
 
@@ -275,7 +282,6 @@ function generarFondoSatelitalParcela(parcelaObj, poligonoRaw, proyeccion) {
 function cambiarModoFondo(nuevoModo) {
   modoFondo = nuevoModo;
 
-  // Actualizar estilos de los 3 botones
   document.querySelectorAll(".fondo-btn").forEach((btn) => {
     const activo = btn.dataset.fondo === nuevoModo;
     if (activo) {
@@ -580,59 +586,6 @@ function seleccionarHerramienta(herramienta) {
         " hover:text-white font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5";
     }
   });
-}
-
-function generarPlantillaEjemplo() {
-  const ancho =
-    parseFloat(document.getElementById("inpAnchoMetros").value) || 100;
-  const alto = parseFloat(document.getElementById("inpAltoMetros").value) || 80;
-
-  nodosPlano = [
-    {
-      id: 1,
-      tipo: "BOMBA",
-      etiqueta: "B-1",
-      x: +(ancho * 0.25).toFixed(1),
-      y: +(alto * 0.5).toFixed(1),
-    },
-    {
-      id: 2,
-      tipo: "VALVULA",
-      etiqueta: "V-1",
-      x: +(ancho * 0.42).toFixed(1),
-      y: +(alto * 0.3).toFixed(1),
-    },
-    {
-      id: 3,
-      tipo: "VALVULA",
-      etiqueta: "V-2",
-      x: +(ancho * 0.45).toFixed(1),
-      y: +(alto * 0.7).toFixed(1),
-    },
-    {
-      id: 4,
-      tipo: "VALVULA",
-      etiqueta: "V-3",
-      x: +(ancho * 0.7).toFixed(1),
-      y: +(alto * 0.35).toFixed(1),
-    },
-    {
-      id: 5,
-      tipo: "NODO_ESP32",
-      etiqueta: "ESP-1",
-      x: +(ancho * 0.5).toFixed(1),
-      y: +(alto * 0.5).toFixed(1),
-    },
-    {
-      id: 6,
-      tipo: "NODO_ESP32",
-      etiqueta: "ESP-2",
-      x: +(ancho * 0.75).toFixed(1),
-      y: +(alto * 0.55).toFixed(1),
-    },
-  ];
-
-  recalcularYRedibujar();
 }
 
 function limpiarLienzo() {
@@ -1185,6 +1138,23 @@ function redibujarLienzo() {
     );
     ctx.restore();
   });
+
+  // Mensaje limpio cuando el usuario aún no registra parcelas ni nodos
+  if (parcelasDisponibles.length === 0 && nodosPlano.length === 0) {
+    ctx.save();
+    const centroAreaX = ANCHO_REGLA_IZQ + (W - ANCHO_REGLA_IZQ) / 2;
+    const centroAreaY = ALTO_REGLA_SUP + (H - ALTO_REGLA_SUP) / 2;
+    ctx.fillStyle = "rgba(148, 163, 184, 0.7)";
+    ctx.font = "600 14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      "Lienzo vacío — Registra una parcela para diseñar tu red hidráulica y de sensores",
+      centroAreaX,
+      centroAreaY,
+    );
+    ctx.restore();
+  }
 
   // 8. Reglas Fijas Superior e Izquierda
   ctx.save();

@@ -15,6 +15,7 @@ app.use(express.static("public"));
 // Configuración de la conexión a MySQL
 const db = mysql.createPool({
   host: process.env.DB_HOST,
+  port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
@@ -38,7 +39,6 @@ app.get("/api/estado", (req, res) => {
 // RUTAS DE AUTENTICACIÓN (LOGIN Y REGISTRO)
 // ==========================================
 
-// Registro de nuevos usuarios
 app.post("/api/auth/registro", (req, res) => {
   const { nombre, correo, clave_hash, rol } = req.body;
 
@@ -71,7 +71,6 @@ app.post("/api/auth/registro", (req, res) => {
   });
 });
 
-// Inicio de sesión
 app.post("/api/auth/login", (req, res) => {
   const { correo, clave_hash } = req.body;
 
@@ -102,10 +101,7 @@ app.post("/api/auth/login", (req, res) => {
 // ==========================================
 // GESTIÓN DE PARCELAS Y CONFIGURACIÓN
 // ==========================================
-/////////////
-// POST /api/parcelas - Crear nueva parcela y vincular dispositivo ESP32
-// POST /api/parcelas - Crear nueva parcela, cultivo y vincular dispositivo ESP32
-// POST /api/parcelas - Crear nueva parcela, cultivo y vincular dispositivo ESP32
+
 // POST /api/parcelas - Crear nueva parcela con contorno poligonal, cultivo y ESP32
 app.post("/api/parcelas", (req, res) => {
   const {
@@ -372,432 +368,6 @@ app.put("/api/parcelas/:id", (req, res) => {
     },
   );
 });
-//////////////
-// =========================================================================
-// CONVERSIÓN GPS -> PLANO MÉTRICO (X, Y) PARA ROBLOX STUDIO Y AGROOPTIMA IO
-// =========================================================================
-function gpsPoligonoAMetros(poligonoJson) {
-  try {
-    const coords =
-      typeof poligonoJson === "string"
-        ? JSON.parse(poligonoJson)
-        : poligonoJson;
-    if (!Array.isArray(coords) || coords.length < 3) return null;
-
-    const lat0 = Number(coords[0][0]);
-    const lng0 = Number(coords[0][1]);
-    const mPorLat = 111132.92;
-    const mPorLng = 111412.84 * Math.cos((lat0 * Math.PI) / 180);
-
-    const crudos = coords.map((p) => ({
-      x: (Number(p[1]) - lng0) * mPorLng,
-      y: (Number(p[0]) - lat0) * mPorLat,
-    }));
-
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
-    crudos.forEach((pt) => {
-      if (pt.x < minX) minX = pt.x;
-      if (pt.x > maxX) maxX = pt.x;
-      if (pt.y < minY) minY = pt.y;
-      if (pt.y > maxY) maxY = pt.y;
-    });
-
-    const ancho = Math.max(5, +(maxX - minX).toFixed(1));
-    const largo = Math.max(5, +(maxY - minY).toFixed(1));
-
-    // Misma proyección exacta que proyectarContornoAMetros() en diseno2d.js
-    const vertices = crudos.map((pt) => ({
-      x: +(pt.x - minX).toFixed(2),
-      y: +(maxY - pt.y).toFixed(2),
-    }));
-
-    return { ancho, largo, vertices };
-  } catch (e) {
-    return null;
-  }
-}
-
-/////////////
-app.get("/api/parcelas/:id/topologia", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const [rows] = await db.promise().query(
-      `SELECT p.*, d.ancho_metros, d.alto_metros, d.nodos_json
-       FROM parcelas p
-       LEFT JOIN disenos_2d d ON d.id_parcela = p.id
-       WHERE p.id = ?`,
-      [id],
-    );
-
-    if (rows.length === 0) {
-      return res.status(404).json({ error: "Parcela no encontrada" });
-    }
-
-    const p = rows[0];
-    const geo = gpsPoligonoAMetros(p.poligono_json);
-    const ladoDefault = p.area_m2
-      ? Math.max(15, +Math.sqrt(Number(p.area_m2)).toFixed(1))
-      : 50;
-
-    const anchoFinal =
-      Number(p.ancho_metros) || (geo ? geo.ancho : ladoDefault);
-    const largoFinal = Number(p.alto_metros) || (geo ? geo.largo : ladoDefault);
-
-    let poligonoM = [
-      { x: 0, y: 0 },
-      { x: anchoFinal, y: 0 },
-      { x: anchoFinal, y: largoFinal },
-      { x: 0, y: largoFinal },
-    ];
-
-    if (geo && geo.vertices.length >= 3) {
-      const escalaX = geo.ancho > 0 ? anchoFinal / geo.ancho : 1;
-      const escalaY = geo.largo > 0 ? largoFinal / geo.largo : 1;
-      poligonoM = geo.vertices.map((v) => ({
-        x: +(v.x * escalaX).toFixed(2),
-        y: +(v.y * escalaY).toFixed(2),
-      }));
-    }
-
-    let nodosDiseno = [];
-    if (p.nodos_json) {
-      try {
-        nodosDiseno =
-          typeof p.nodos_json === "string"
-            ? JSON.parse(p.nodos_json)
-            : p.nodos_json;
-      } catch (e) {
-        nodosDiseno = [];
-      }
-    }
-
-    const [colsInfo] = await db
-      .promise()
-      .query("SHOW COLUMNS FROM dispositivos");
-    const colsDisp = new Set(colsInfo.map((c) => c.Field));
-
-    const [dispRows] = await db
-      .promise()
-      .query("SELECT * FROM dispositivos WHERE id_parcela = ?", [id]);
-    const dispActivos = dispRows.filter(
-      (d) => !d.estado || d.estado === "ACTIVO",
-    );
-
-    const nodos = [];
-    if (Array.isArray(nodosDiseno) && nodosDiseno.length > 0) {
-      for (const n of nodosDiseno) {
-        const mac = String(n.id || n.codigo_mac || "").trim();
-        if (!mac) continue;
-        const subtipo = String(n.tipo || "esp32").toLowerCase();
-        const tipoRol = subtipo === "bomba" ? "GATEWAY_POZO" : "SENSOR";
-        const nombreNodo = String(n.nombre || n.etiqueta || mac);
-        const posX = Number(n.x) || 0;
-        const posY = Number(n.y) || 0;
-
-        if (colsDisp.has("codigo_mac") && colsDisp.has("id_parcela")) {
-          const [existe] = await db
-            .promise()
-            .query("SELECT * FROM dispositivos WHERE codigo_mac = ? LIMIT 1", [
-              mac,
-            ]);
-
-          const campos = { id_parcela: id };
-          if (colsDisp.has("id_usuario") && p.id_usuario)
-            campos.id_usuario = p.id_usuario;
-          if (colsDisp.has("nombre")) campos.nombre = nombreNodo;
-          if (colsDisp.has("tipo")) campos.tipo = tipoRol;
-          if (colsDisp.has("tipo_dispositivo"))
-            campos.tipo_dispositivo = subtipo;
-          if (colsDisp.has("pos_x")) campos.pos_x = posX;
-          if (colsDisp.has("pos_y")) campos.pos_y = posY;
-          if (colsDisp.has("estado")) campos.estado = "ACTIVO";
-
-          if (existe.length > 0) {
-            const sets = Object.keys(campos)
-              .map((k) => `${k} = ?`)
-              .join(", ");
-            await db
-              .promise()
-              .query(`UPDATE dispositivos SET ${sets} WHERE codigo_mac = ?`, [
-                ...Object.values(campos),
-                mac,
-              ]);
-          } else {
-            campos.codigo_mac = mac;
-            for (const c of colsInfo) {
-              if (
-                !(c.Field in campos) &&
-                c.Null === "NO" &&
-                c.Default === null &&
-                !String(c.Extra || "").includes("auto_increment")
-              ) {
-                campos[c.Field] = /^(int|decimal|float|double|tinyint)/i.test(
-                  c.Type,
-                )
-                  ? 0
-                  : "";
-              }
-            }
-            const keys = Object.keys(campos);
-            const placeholders = keys.map(() => "?").join(", ");
-            await db
-              .promise()
-              .query(
-                `INSERT INTO dispositivos (${keys.join(", ")}) VALUES (${placeholders})`,
-                Object.values(campos),
-              );
-          }
-        }
-
-        nodos.push({
-          id: mac,
-          nombre: nombreNodo,
-          tipo: tipoRol,
-          subtipo,
-          x: posX,
-          y: posY,
-        });
-      }
-    } else if (dispActivos.length > 0) {
-      const total = dispActivos.length;
-      dispActivos.forEach((d, idx) => {
-        const tienePos = Number(d.pos_x) !== 0 || Number(d.pos_y) !== 0;
-        const autoX = +(((idx + 1) / (total + 1)) * anchoFinal).toFixed(2);
-        const autoY = +(largoFinal * 0.5).toFixed(2);
-        const tipoDetectado =
-          d.tipo === "GATEWAY_POZO" ? "GATEWAY_POZO" : "SENSOR";
-        nodos.push({
-          id: d.codigo_mac,
-          nombre: d.nombre || d.codigo_mac,
-          tipo: tipoDetectado,
-          subtipo: tipoDetectado === "GATEWAY_POZO" ? "bomba" : "esp32",
-          x:
-            tienePos && !Number.isNaN(Number(d.pos_x))
-              ? Number(d.pos_x)
-              : autoX,
-          y:
-            tienePos && !Number.isNaN(Number(d.pos_y))
-              ? Number(d.pos_y)
-              : autoY,
-        });
-      });
-    }
-
-    res.json({
-      parcela_id: p.id,
-      nombre: p.nombre || p.parcela || `Parcela #${p.id}`,
-      cultivo: p.cultivo || p.tipo_cultivo || p.variedad || "General",
-      umbral_humedad: Number(p.umbral_humedad || 50),
-      modo_riego: p.modo_riego || "AUTOMATICO",
-      dimensiones_m: {
-        ancho: anchoFinal,
-        largo: largoFinal,
-        area_m2: p.area_m2
-          ? Number(p.area_m2)
-          : +(anchoFinal * largoFinal).toFixed(1),
-      },
-      poligono_m: poligonoM,
-      nodos,
-    });
-  } catch (err) {
-    console.error("Error obteniendo topología unificada:", err);
-    res.status(500).json({ error: "Error obteniendo topología de parcela" });
-  }
-});
-///////////
-
-// PUT /api/parcelas/:id/topologia -> Permite a AgroOptima IO guardar ajustes 3D (X, Y, Z)
-app.put("/api/parcelas/:id/topologia", (req, res) => {
-  const { id } = req.params;
-  const { nodos } = req.body;
-
-  if (!Array.isArray(nodos)) {
-    return res.status(400).json({ error: "Se requiere el arreglo 'nodos'" });
-  }
-
-  nodos.forEach((n) => {
-    if (n.id) {
-      db.query(
-        "UPDATE dispositivos SET pos_x = ?, pos_y = ?, pos_z = ?, tipo_nodo = COALESCE(?, tipo_nodo) WHERE codigo_mac = ? AND id_parcela = ?",
-        [n.x || 0, n.y || 0, n.z || 0, n.tipo || null, n.id, id],
-      );
-    }
-  });
-
-  res.json({ ok: true, mensaje: "Topología 3D sincronizada con ASIR." });
-});
-
-// GET /api/alertas -> Consultar alertas climáticas recientes para el dashboard
-app.get("/api/alertas", (req, res) => {
-  const query = `
-    SELECT a.*, p.nombre AS parcela
-    FROM alertas_climaticas a
-    JOIN parcelas p ON a.id_parcela = p.id
-    ORDER BY a.id DESC
-    LIMIT 20
-  `;
-  db.query(query, (err, rows) => {
-    if (err)
-      return res.status(500).json({ error: "Error consultando alertas" });
-    res.json(rows);
-  });
-});
-
-//////////////
-// ==========================================
-// PROGRAMACIÓN HORARIA E HISTORIAL DE RIEGO
-// ==========================================
-
-// Listar programaciones de riego del usuario
-app.get("/api/riego/programaciones", (req, res) => {
-  const { id_usuario } = req.query;
-  let filtro = "";
-  const params = [];
-
-  if (id_usuario) {
-    filtro = " WHERE p.id_usuario = ? ";
-    params.push(id_usuario);
-  }
-
-  const query = `
-    SELECT 
-      pr.id,
-      pr.id_parcela,
-      p.nombre AS parcela,
-      pr.dias_semana,
-      TIME_FORMAT(pr.hora_inicio, '%H:%i') AS hora_inicio,
-      pr.duracion_minutos,
-      pr.activo
-    FROM programaciones_riego pr
-    JOIN parcelas p ON pr.id_parcela = p.id
-    ${filtro}
-    ORDER BY pr.hora_inicio ASC
-  `;
-
-  db.query(query, params, (err, resultados) => {
-    if (err) {
-      console.error("❌ Error al consultar programaciones:", err);
-      return res.status(500).json({ error: "Error al cargar programaciones" });
-    }
-    res.json(resultados);
-  });
-});
-
-// Crear nueva programación horaria
-app.post("/api/riego/programaciones", (req, res) => {
-  const { id_parcela, dias_semana, hora_inicio, duracion_minutos } = req.body;
-
-  if (!id_parcela || !dias_semana || !hora_inicio) {
-    return res.status(400).json({
-      error: "Parcela, días de la semana y hora de inicio son obligatorios.",
-    });
-  }
-
-  const duracion = parseInt(duracion_minutos, 10) || 15;
-  const query = `
-    INSERT INTO programaciones_riego (id_parcela, dias_semana, hora_inicio, duracion_minutos, activo)
-    VALUES (?, ?, ?, ?, 1)
-  `;
-
-  db.query(
-    query,
-    [id_parcela, dias_semana, hora_inicio, duracion],
-    (err, result) => {
-      if (err) {
-        console.error("❌ Error al guardar programación:", err);
-        return res
-          .status(500)
-          .json({ error: "Error al guardar programación de riego" });
-      }
-
-      db.query(
-        "INSERT INTO historial_riego (id_parcela, origen, accion, detalle) VALUES (?, 'CRONOGRAMA', 'HORARIO CREADO', ?)",
-        [
-          id_parcela,
-          `Días: ${dias_semana} | Inicio: ${hora_inicio} (${duracion} min)`,
-        ],
-        () => {},
-      );
-
-      res.status(201).json({
-        ok: true,
-        id: result.insertId,
-        mensaje: "Programación de riego registrada.",
-      });
-    },
-  );
-});
-
-// Activar / Pausar una programación horaria
-app.put("/api/riego/programaciones/:id/estado", (req, res) => {
-  const { id } = req.params;
-  const { activo } = req.body;
-
-  db.query(
-    "UPDATE programaciones_riego SET activo = ? WHERE id = ?",
-    [activo ? 1 : 0, id],
-    (err) => {
-      if (err) {
-        return res
-          .status(500)
-          .json({ error: "Error al actualizar estado del horario" });
-      }
-      res.json({ ok: true });
-    },
-  );
-});
-
-// Eliminar una programación horaria
-app.delete("/api/riego/programaciones/:id", (req, res) => {
-  const { id } = req.params;
-
-  db.query("DELETE FROM programaciones_riego WHERE id = ?", [id], (err) => {
-    if (err) {
-      return res.status(500).json({ error: "Error al eliminar programación" });
-    }
-    res.json({ ok: true });
-  });
-});
-
-// Obtener historial de eventos de riego
-app.get("/api/riego/historial", (req, res) => {
-  const { id_usuario } = req.query;
-  let filtro = "";
-  const params = [];
-
-  if (id_usuario) {
-    filtro = " WHERE p.id_usuario = ? ";
-    params.push(id_usuario);
-  }
-
-  const query = `
-    SELECT 
-      h.id,
-      h.id_parcela,
-      p.nombre AS parcela,
-      h.origen,
-      h.accion,
-      h.detalle,
-      h.fecha_registro
-    FROM historial_riego h
-    JOIN parcelas p ON h.id_parcela = p.id
-    ${filtro}
-    ORDER BY h.fecha_registro DESC
-    LIMIT 25
-  `;
-
-  db.query(query, params, (err, resultados) => {
-    if (err) {
-      console.error("❌ Error al consultar historial de riego:", err);
-      return res.status(500).json({ error: "Error al consultar historial" });
-    }
-    res.json(resultados);
-  });
-});
-//////////
 
 // DELETE /api/parcelas/:id - Eliminar parcela y sus registros vinculados
 app.delete("/api/parcelas/:id", (req, res) => {
@@ -842,43 +412,6 @@ app.delete("/api/parcelas/:id", (req, res) => {
     );
   });
 });
-/////////
-
-// Obtener lista de parcelas (opcionalmente filtradas por id_usuario)
-app.get("/api/parcelas", (req, res) => {
-  const { id_usuario } = req.query;
-  let filtroSQL = "";
-  const params = [];
-
-  if (id_usuario) {
-    filtroSQL = " WHERE p.id_usuario = ? ";
-    params.push(id_usuario);
-  }
-
-  const query = `
-    SELECT 
-      p.id, 
-      p.nombre AS parcela, 
-      p.umbral_humedad,
-      p.modo_riego,
-      p.latitud,
-      p.longitud,
-      c.nombre AS cultivo,
-      d.codigo_mac
-    FROM parcelas p
-    LEFT JOIN cultivos c ON c.id_parcela = p.id OR c.id = p.id
-    LEFT JOIN dispositivos d ON d.id_parcela = p.id
-    ${filtroSQL}
-  `;
-
-  db.query(query, params, (err, resultados) => {
-    if (err) {
-      console.error("❌ Error al consultar parcelas:", err);
-      return res.status(500).json({ error: "Error al consultar parcelas" });
-    }
-    res.json(resultados);
-  });
-});
 
 // Actualizar umbral de humedad atómico por parcela
 app.put("/api/parcelas/:id/umbral", (req, res) => {
@@ -917,7 +450,7 @@ app.put("/api/parcelas/:id/modo", (req, res) => {
   }
 
   const query = "UPDATE parcelas SET modo_riego = ? WHERE id = ?";
-  db.query(query, [modo, id], (err, resultado) => {
+  db.query(query, [modo, id], (err) => {
     if (err) {
       console.error("❌ Error al actualizar modo de riego:", err);
       return res.status(500).json({ error: "Error de BD: " + err.message });
@@ -926,17 +459,172 @@ app.put("/api/parcelas/:id/modo", (req, res) => {
   });
 });
 
+// GET /api/alertas -> Consultar alertas climáticas recientes para el dashboard
+app.get("/api/alertas", (req, res) => {
+  const query = `
+    SELECT a.*, p.nombre AS parcela
+    FROM alertas_climaticas a
+    JOIN parcelas p ON a.id_parcela = p.id
+    ORDER BY a.id DESC
+    LIMIT 20
+  `;
+  db.query(query, (err, rows) => {
+    if (err)
+      return res.status(500).json({ error: "Error consultando alertas" });
+    res.json(rows);
+  });
+});
+
+// ==========================================
+// PROGRAMACIÓN HORARIA E HISTORIAL DE RIEGO
+// ==========================================
+
+app.get("/api/riego/programaciones", (req, res) => {
+  const { id_usuario } = req.query;
+  let filtro = "";
+  const params = [];
+
+  if (id_usuario) {
+    filtro = " WHERE p.id_usuario = ? ";
+    params.push(id_usuario);
+  }
+
+  const query = `
+    SELECT 
+      pr.id,
+      pr.id_parcela,
+      p.nombre AS parcela,
+      pr.dias_semana,
+      TIME_FORMAT(pr.hora_inicio, '%H:%i') AS hora_inicio,
+      pr.duracion_minutos,
+      pr.activo
+    FROM programaciones_riego pr
+    JOIN parcelas p ON pr.id_parcela = p.id
+    ${filtro}
+    ORDER BY pr.hora_inicio ASC
+  `;
+
+  db.query(query, params, (err, resultados) => {
+    if (err) {
+      console.error("❌ Error al consultar programaciones:", err);
+      return res.status(500).json({ error: "Error al cargar programaciones" });
+    }
+    res.json(resultados);
+  });
+});
+
+app.post("/api/riego/programaciones", (req, res) => {
+  const { id_parcela, dias_semana, hora_inicio, duracion_minutos } = req.body;
+
+  if (!id_parcela || !dias_semana || !hora_inicio) {
+    return res.status(400).json({
+      error: "Parcela, días de la semana y hora de inicio son obligatorios.",
+    });
+  }
+
+  const duracion = parseInt(duracion_minutos, 10) || 15;
+  const query = `
+    INSERT INTO programaciones_riego (id_parcela, dias_semana, hora_inicio, duracion_minutos, activo)
+    VALUES (?, ?, ?, ?, 1)
+  `;
+
+  db.query(
+    query,
+    [id_parcela, dias_semana, hora_inicio, duracion],
+    (err, result) => {
+      if (err) {
+        console.error("❌ Error al guardar programación:", err);
+        return res
+          .status(500)
+          .json({ error: "Error al guardar programación de riego" });
+      }
+
+      db.query(
+        "INSERT INTO historial_riego (id_parcela, origen, accion, detalle) VALUES (?, 'CRONOGRAMA', 'HORARIO CREADO', ?)",
+        [
+          id_parcela,
+          `Días: ${dias_semana} | Inicio: ${hora_inicio} (${duracion} min)`,
+        ],
+        () => {},
+      );
+
+      res.status(201).json({
+        ok: true,
+        id: result.insertId,
+        mensaje: "Programación de riego registrada.",
+      });
+    },
+  );
+});
+
+app.put("/api/riego/programaciones/:id/estado", (req, res) => {
+  const { id } = req.params;
+  const { activo } = req.body;
+
+  db.query(
+    "UPDATE programaciones_riego SET activo = ? WHERE id = ?",
+    [activo ? 1 : 0, id],
+    (err) => {
+      if (err) {
+        return res
+          .status(500)
+          .json({ error: "Error al actualizar estado del horario" });
+      }
+      res.json({ ok: true });
+    },
+  );
+});
+
+app.delete("/api/riego/programaciones/:id", (req, res) => {
+  const { id } = req.params;
+
+  db.query("DELETE FROM programaciones_riego WHERE id = ?", [id], (err) => {
+    if (err) {
+      return res.status(500).json({ error: "Error al eliminar programación" });
+    }
+    res.json({ ok: true });
+  });
+});
+
+app.get("/api/riego/historial", (req, res) => {
+  const { id_usuario } = req.query;
+  let filtro = "";
+  const params = [];
+
+  if (id_usuario) {
+    filtro = " WHERE p.id_usuario = ? ";
+    params.push(id_usuario);
+  }
+
+  const query = `
+    SELECT 
+      h.id,
+      h.id_parcela,
+      p.nombre AS parcela,
+      h.origen,
+      h.accion,
+      h.detalle,
+      h.fecha_registro
+    FROM historial_riego h
+    JOIN parcelas p ON h.id_parcela = p.id
+    ${filtro}
+    ORDER BY h.fecha_registro DESC
+    LIMIT 25
+  `;
+
+  db.query(query, params, (err, resultados) => {
+    if (err) {
+      console.error("❌ Error al consultar historial de riego:", err);
+      return res.status(500).json({ error: "Error al consultar historial" });
+    }
+    res.json(resultados);
+  });
+});
+
 // ==========================================
 // RECEPCIÓN Y CONSULTA DE TELEMETRÍA
 // ==========================================
 
-// Recepción de telemetría del ESP32 y decisión de riego (AUTO vs MANUAL)
-// ==========================================
-// RECEPCIÓN Y CONSULTA DE TELEMETRÍA
-// ==========================================
-
-// Recepción de telemetría del ESP32 y decisión de riego (AUTO + HORARIOS vs MANUAL)
-// Recepción de telemetría del ESP32 y decisión de riego (AUTO + HORARIOS vs MANUAL)
 app.post("/api/telemetria", (req, res) => {
   const { codigo_mac, temperatura, humedad_suelo, humedad_aire, lluvia_mm } =
     req.body;
@@ -981,7 +669,6 @@ app.post("/api/telemetria", (req, res) => {
       umbral_humedad !== null ? parseFloat(umbral_humedad) : 35.0;
     const modoParcela = modo_riego || "AUTO";
 
-    // Función auxiliar para guardar alerta sin duplicar cada 10s (cooldown 5 min)
     const registrarAlertaElNino = (tipo, severidad, mensaje) => {
       if (!id_parcela) return;
       const qCheck = `
@@ -1016,7 +703,6 @@ app.post("/api/telemetria", (req, res) => {
             .json({ error: "Error al registrar datos en BD" });
         }
 
-        // Evaluación adaptativa Fenómeno del Niño
         let alertaActiva = null;
         let umbralEfectivo = umbralBase;
 
@@ -1134,12 +820,10 @@ app.post("/api/telemetria", (req, res) => {
           return responderTelemetria(false, "MANUAL_OFF");
         }
 
-        // Prioridad máxima en AUTO: bloqueo por saturación o lluvia torrencial
         if (saturadoOLluvia) {
           return responderTelemetria(false, "BLOQUEO_SATURACION_LLUVIA");
         }
 
-        // Revisar cronograma horario
         const qHorario = `
           SELECT pr.dias_semana, TIME_FORMAT(pr.hora_inicio, '%H:%i') AS hora_inicio, pr.duracion_minutos
           FROM programaciones_riego pr
@@ -1186,7 +870,7 @@ app.post("/api/telemetria", (req, res) => {
     );
   });
 });
-///////////
+
 // Consulta de telemetría filtrada
 app.get("/api/telemetria", (req, res) => {
   const { parcela_id, codigo_mac } = req.query;
@@ -1206,7 +890,6 @@ app.get("/api/telemetria", (req, res) => {
   const filtroSQL =
     condiciones.length > 0 ? " WHERE " + condiciones.join(" AND ") : "";
 
-  // Agrupación temporal (ventanas de 5s) + promedio espacial de los nodos activos
   const query = `
     SELECT 
         MAX(t.id) AS id,
@@ -1242,8 +925,10 @@ app.get("/api/telemetria", (req, res) => {
   });
 });
 
-//////////
-// Obtener el diseño 2D y ortofoto guardada de una parcela
+// ==========================================
+// DISEÑADOR DE INGENIERÍA 2D Y ORTOFOTO
+// ==========================================
+
 app.get("/api/diseno2d/:id_parcela", (req, res) => {
   const { id_parcela } = req.params;
 
@@ -1290,7 +975,6 @@ app.get("/api/diseno2d/:id_parcela", (req, res) => {
   });
 });
 
-// Guardar o actualizar el diseño 2D y ortofoto de una parcela
 app.post("/api/diseno2d/:id_parcela", (req, res) => {
   const { id_parcela } = req.params;
   const {
@@ -1339,10 +1023,6 @@ app.post("/api/diseno2d/:id_parcela", (req, res) => {
     },
   );
 });
-////////
-// =========================================================================
-// MÓDULO DE ALERTAS AGROCLIMÁTICAS Y NOTICIAS DEL SECTOR (CACHÉ 3 DÍAS)
-// =========================================================================
 
 // =========================================================================
 // MÓDULO DE ALERTAS AGROCLIMÁTICAS Y NOTICIAS DEL SECTOR (CACHÉ 3 DÍAS)
@@ -1594,7 +1274,6 @@ async function descargarNoticiasRssAgro() {
     }
   }
 
-  // Completar siempre hasta mínimo 7 noticias (4 carrusel + 3 tarjetas completas abajo)
   const respaldo = obtenerNoticiasRespaldo();
   for (const item of respaldo) {
     if (noticias.length >= 7) break;
@@ -1773,7 +1452,6 @@ app.get("/api/alertas-agro/:id_usuario", (req, res) => {
         console.warn("⚠️ Open-Meteo error:", e.message);
       }
 
-      // Estado resumido minimalista
       let estado = "OPTIMO";
       let notaBreve = "Parámetros estables";
 
@@ -1812,8 +1490,7 @@ app.get("/api/alertas-agro/:id_usuario", (req, res) => {
     res.json(resultados);
   });
 });
-////////
-////
+
 // =========================================================================
 // MÓDULO DE REPORTES Y EXPORTACIÓN (TELEMETRÍA, INGENIERÍA 2D Y RIEGO)
 // =========================================================================
@@ -1821,7 +1498,6 @@ app.get("/api/alertas-agro/:id_usuario", (req, res) => {
 function calcularMetrosRedPvc(nodos, anchoMetros, altoMetros) {
   if (!Array.isArray(nodos) || nodos.length < 2) return 0;
 
-  // Detectar si las coordenadas están en metros o en píxeles de lienzo (800x500)
   const maxCoord = nodos.reduce(
     (acc, n) => Math.max(acc, parseFloat(n.x) || 0, parseFloat(n.y) || 0),
     0,
@@ -1837,7 +1513,6 @@ function calcularMetrosRedPvc(nodos, anchoMetros, altoMetros) {
     };
   });
 
-  // Árbol de recubrimiento mínimo (Prim) para estimar el tendido troncal de tubería
   const visitados = new Set([0]);
   let metrosTotales = 0;
 
@@ -1883,7 +1558,6 @@ app.get("/api/reportes/consolidado", (req, res) => {
     paramsBase.push(id_parcela);
   }
 
-  // 1. Consulta de Parcelas + Ingeniería 2D
   const qIngenieria = `
     SELECT 
       p.id,
@@ -1953,7 +1627,6 @@ app.get("/api/reportes/consolidado", (req, res) => {
       };
     });
 
-    // 2. Consulta de Telemetría Histórica filtrada por fechas
     const paramsTel = [...paramsBase];
     let filtroFechaTel = "";
     if (fecha_inicio && fecha_fin) {
@@ -1987,7 +1660,6 @@ app.get("/api/reportes/consolidado", (req, res) => {
         return res.status(500).json({ error: "Error consultando telemetría" });
       }
 
-      // 3. Programaciones horarias de riego
       const qProg = `
         SELECT 
           pr.id,
@@ -2010,7 +1682,6 @@ app.get("/api/reportes/consolidado", (req, res) => {
             .json({ error: "Error consultando programaciones" });
         }
 
-        // 4. Bitácora / Historial de eventos de riego
         const paramsHist = [...paramsBase];
         let filtroFechaHist = "";
         if (fecha_inicio && fecha_fin) {
@@ -2052,7 +1723,6 @@ app.get("/api/reportes/consolidado", (req, res) => {
     });
   });
 });
-/////////
 
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);

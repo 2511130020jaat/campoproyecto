@@ -257,86 +257,6 @@ async function cargarListaParcelas() {
   }
 }
 
-let ultimaParcelaTelemetria = null;
-
-function obtenerOCrearSelectorNodo() {
-  let selectNodo = document.getElementById("selectNodo");
-  if (!selectNodo) {
-    const selectParcela = document.getElementById("selectParcela");
-    if (!selectParcela || !selectParcela.parentNode) return null;
-
-    selectNodo = document.createElement("select");
-    selectNodo.id = "selectNodo";
-    selectNodo.className = selectParcela.className;
-    selectNodo.title = "Filtrar telemetría por nodo/sensor";
-    selectNodo.innerHTML = '<option value="todos">📡 Todos los nodos</option>';
-    selectParcela.parentNode.insertBefore(
-      selectNodo,
-      selectParcela.nextSibling,
-    );
-  }
-
-  if (!selectNodo.dataset.listenerListo) {
-    selectNodo.addEventListener("change", () => cargarTelemetria());
-    selectNodo.dataset.listenerListo = "1";
-  }
-  return selectNodo;
-}
-
-async function actualizarOpcionesNodos(selectNodo, idParcela, datosTelemetria) {
-  if (!selectNodo) return "todos";
-
-  // Si el usuario cambió de parcela, volver a la vista general de nodos
-  if (ultimaParcelaTelemetria !== idParcela) {
-    selectNodo.value = "todos";
-    ultimaParcelaTelemetria = idParcela;
-  }
-
-  const seleccionPrevia = selectNodo.value || "todos";
-  const macsSet = new Set();
-
-  // 1. Nodos registrados en la topología real de la parcela (Página Principal + Web IO)
-  if (idParcela && idParcela !== "todas") {
-    try {
-      const resTopo = await fetch(`/api/parcelas/${idParcela}/topologia`);
-      if (resTopo.ok) {
-        const topo = await resTopo.json();
-        if (Array.isArray(topo.nodos)) {
-          topo.nodos.forEach((n) => {
-            if (n.id && n.tipo !== "GATEWAY_POZO") macsSet.add(String(n.id));
-          });
-        }
-      }
-    } catch (e) {
-      // Si falla topología, continúa con los nodos presentes en telemetría
-    }
-  }
-
-  // 2. Nodos presentes en el historial reciente de telemetría
-  if (Array.isArray(datosTelemetria)) {
-    datosTelemetria.forEach((d) => {
-      if (d.codigo_mac) macsSet.add(String(d.codigo_mac));
-    });
-  }
-
-  const listaMacs = Array.from(macsSet);
-  selectNodo.innerHTML = '<option value="todos">📡 Todos los nodos</option>';
-  listaMacs.forEach((mac) => {
-    const opt = document.createElement("option");
-    opt.value = mac;
-    opt.textContent = `Sensor: ${mac}`;
-    selectNodo.appendChild(opt);
-  });
-
-  if (seleccionPrevia !== "todos" && listaMacs.includes(seleccionPrevia)) {
-    selectNodo.value = seleccionPrevia;
-  } else {
-    selectNodo.value = "todos";
-  }
-
-  return selectNodo.value;
-}
-
 function agruparSeriePorVentana(registros, ventanaMs = 5000) {
   const buckets = new Map();
 
@@ -398,7 +318,6 @@ function agruparSeriePorVentana(registros, ventanaMs = 5000) {
 async function cargarTelemetria() {
   try {
     const idSel = document.getElementById("selectParcela").value;
-    const selectNodo = obtenerOCrearSelectorNodo();
     actualizarUmbralUI(idSel);
 
     if (idSel !== "todas") {
@@ -412,17 +331,7 @@ async function cargarTelemetria() {
     }
 
     const res = await fetch(`/api/telemetria?parcela_id=${idSel}`);
-    const datosCrudos = await res.json();
-
-    const nodoSel = await actualizarOpcionesNodos(
-      selectNodo,
-      idSel,
-      datosCrudos,
-    );
-    const datos =
-      nodoSel !== "todos"
-        ? (datosCrudos || []).filter((d) => String(d.codigo_mac) === nodoSel)
-        : datosCrudos || [];
+    const datos = await res.json();
 
     if (!datos || datos.length === 0) {
       document.getElementById("valTemp").innerText = "-- °C";
@@ -430,8 +339,7 @@ async function cargarTelemetria() {
       document.getElementById("valHumAire").innerText = "-- %";
       document.getElementById("lblParcela").innerText = "Parcela: Sin datos";
       document.getElementById("lblCultivo").innerText = "Cultivo: --";
-      document.getElementById("lblMac").innerText =
-        nodoSel !== "todos" ? `Nodo: ${nodoSel} (sin lecturas)` : "Nodo: --";
+      document.getElementById("lblMac").innerText = "Nodo: --";
       document.getElementById("tablaCuerpo").innerHTML =
         '<tr><td colspan="7" class="p-4 text-center text-slate-500">No hay registros de telemetría para la selección actual</td></tr>';
       chartTelemetria.data.labels = [];
@@ -452,11 +360,9 @@ async function cargarTelemetria() {
     document.getElementById("lblCultivo").innerText =
       `Cultivo: ${u.cultivo || "N/A"}`;
     document.getElementById("lblMac").innerText =
-      nodoSel !== "todos"
-        ? `Nodo: ${nodoSel}`
-        : nodosUnicosEnDatos > 1
-          ? `Nodos activos: ${nodosUnicosEnDatos} (último: ${u.codigo_mac})`
-          : `Nodo: ${u.codigo_mac}`;
+      nodosUnicosEnDatos > 1
+        ? `Nodos activos: ${nodosUnicosEnDatos} (último: ${u.codigo_mac})`
+        : `Nodo: ${u.codigo_mac}`;
 
     evaluarRiesgoClimatico(u.temperatura, u.humedad_suelo);
 
@@ -494,9 +400,8 @@ async function cargarTelemetria() {
       `;
     });
 
-    // Si está en vista general con varios nodos, agrupa por ventana de 5s para evitar zig-zag en la gráfica
     const serieHistoria =
-      nodoSel === "todos" && nodosUnicosEnDatos > 1
+      nodosUnicosEnDatos > 1
         ? agruparSeriePorVentana(datos, 5000).slice(-12)
         : datos.slice(0, 12).reverse();
 
