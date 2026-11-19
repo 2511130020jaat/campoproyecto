@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASIR - Dashboard de Monitoreo</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/sidebar.js"></script>
+  </head>
+
+  <body class="bg-slate-900 text-slate-100 font-sans flex min-h-screen">
+    <div id="sidebar-container"></div>
+
+    <div class="flex-grow flex flex-col min-w-0">
+      <header
+        class="bg-slate-800/90 backdrop-blur border-b border-slate-700 p-4 sticky top-0 z-40 flex flex-wrap items-center justify-between gap-4"
+      >
+        <div class="flex items-center gap-3">
+          <button id="btnMenu" class="lg:hidden text-2xl text-slate-300 p-1">
+            ☰
+          </button>
+          <div>
+            <h2 class="text-base font-bold text-slate-100">
+              Panel de Control General
+            </h2>
+            <p class="text-xs text-slate-400">
+              Telemetría de Red de Sensores de Campo
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <label
+            for="selectParcela"
+            class="text-xs font-semibold text-slate-400 hidden sm:block"
+            >Parcela:</label
+          >
+          <select
+            id="selectParcela"
+            onchange="cargarTelemetria()"
+            class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 font-semibold focus:outline-none focus:border-sky-500"
+          >
+            <option value="todas">🌐 Todas las Parcelas</option>
+          </select>
+
+          <div
+            class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-700 text-xs"
+          >
+            <span
+              class="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"
+            ></span>
+            <span class="text-slate-300 hidden md:inline">En línea</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="p-4 md:p-6 space-y-6 flex-grow">
+        <!-- VISTA DE BIENVENIDA (EMPTY STATE) -->
+        <div
+          id="vistaEmptyState"
+          class="hidden bg-slate-800 border border-slate-700 p-8 rounded-2xl text-center max-w-2xl mx-auto my-12 shadow-2xl"
+        >
+          <span class="text-6xl block mb-4">🌾</span>
+          <h3 class="text-xl font-bold text-slate-100">¡Bienvenido a ASIR!</h3>
+          <p class="text-sm text-slate-400 mt-2">
+            Aún no tienes campos ni sensores telemétricos registrados en tu
+            cuenta. Vincula tu primer dispositivo ESP32 o configura tus sectores
+            agrícolas.
+          </p>
+          <div class="mt-6 flex flex-wrap justify-center gap-4">
+            <a
+              href="/parcelas.html"
+              class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition"
+            >
+              ➕ Registrar Mi Primer Campo
+            </a>
+          </div>
+        </div>
+
+        <div id="contenedorDashboard" class="space-y-6">
+          <div
+            id="bannerAlerta"
+            class="bg-slate-800 border-l-4 border-emerald-500 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg"
+          >
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs uppercase font-bold text-slate-400"
+                  >Estado Agrometeorológico</span
+                >
+                <span
+                  id="badgeEstado"
+                  class="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded font-semibold"
+                  >ÓPTIMO</span
+                >
+              </div>
+              <h3
+                id="txtDiagnostico"
+                class="text-sm font-bold text-slate-200 mt-1"
+              >
+                Parámetros dentro del rango agronómico recomendado.
+              </h3>
+            </div>
+          </div>
+
+          <div
+            id="panelUmbral"
+            class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-wrap items-center justify-between gap-4 shadow-lg"
+          >
+            <div class="flex items-center gap-3">
+              <span class="text-2xl">⚙️</span>
+              <div>
+                <h4 class="text-sm font-bold text-slate-200">
+                  Control y Criterio de Riego Atómico
+                </h4>
+                <p class="text-xs text-slate-400">
+                  Configura el umbral automático o fuerza el riego de forma
+                  manual
+                </p>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-4">
+              <div
+                class="flex items-center bg-slate-900 p-1 rounded-lg border border-slate-700 text-xs"
+              >
+                <button
+                  id="btnModoAuto"
+                  onclick="cambiarModoRiego('AUTO')"
+                  class="px-3 py-1.5 rounded-md font-semibold transition bg-sky-600 text-white"
+                >
+                  🤖 AUTO
+                </button>
+                <button
+                  id="btnModoOn"
+                  onclick="cambiarModoRiego('MANUAL_ON')"
+                  class="px-3 py-1.5 rounded-md font-semibold transition text-slate-400 hover:text-white"
+                >
+                  💧 ON
+                </button>
+                <button
+                  id="btnModoOff"
+                  onclick="cambiarModoRiego('MANUAL_OFF')"
+                  class="px-3 py-1.5 rounded-md font-semibold transition text-slate-400 hover:text-white"
+                >
+                  🛑 OFF
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <div class="relative">
+                  <input
+                    type="number"
+                    id="inputUmbral"
+                    min="5"
+                    max="90"
+                    step="1"
+                    placeholder="35"
+                    class="w-20 bg-slate-900 border border-slate-700 text-amber-400 font-bold text-center text-sm rounded-lg py-1.5 px-2 focus:outline-none focus:border-sky-500"
+                  />
+                  <span
+                    class="absolute right-2 top-1.5 text-xs text-slate-500 font-bold"
+                    >%</span
+                  >
+                </div>
+                <button
+                  onclick="guardarUmbralParcela()"
+                  class="bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs px-3 py-2 rounded-lg transition border border-sky-400/30"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div
+              class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex justify-between items-center shadow-lg"
+            >
+              <div>
+                <p class="text-xs text-slate-400 uppercase font-semibold">
+                  Temperatura Térmica
+                </p>
+                <h3
+                  id="valTemp"
+                  class="text-3xl font-black text-amber-400 mt-1"
+                >
+                  -- °C
+                </h3>
+                <p id="lblParcela" class="text-xs text-slate-500 mt-1">
+                  Parcela: --
+                </p>
+              </div>
+              <div class="text-4xl bg-amber-500/10 p-3 rounded-lg">🌡️</div>
+            </div>
+
+            <div
+              class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex justify-between items-center shadow-lg"
+            >
+              <div>
+                <p class="text-xs text-slate-400 uppercase font-semibold">
+                  Humedad del Suelo
+                </p>
+                <h3
+                  id="valHumSuelo"
+                  class="text-3xl font-black text-emerald-400 mt-1"
+                >
+                  -- %
+                </h3>
+                <p id="lblCultivo" class="text-xs text-slate-500 mt-1">
+                  Cultivo: --
+                </p>
+                <div class="mt-2">
+                  <span
+                    id="badgeRiego"
+                    class="inline-flex items-center gap-1.5 bg-slate-700 text-slate-400 text-xs px-2.5 py-0.5 rounded-full font-semibold"
+                  >
+                    🛑 Riego Inactivo
+                  </span>
+                </div>
+              </div>
+              <div class="text-4xl bg-emerald-500/10 p-3 rounded-lg">💧</div>
+            </div>
+
+            <div
+              class="bg-slate-800 p-5 rounded-xl border border-slate-700 flex justify-between items-center shadow-lg sm:col-span-2 lg:col-span-1"
+            >
+              <div>
+                <p class="text-xs text-slate-400 uppercase font-semibold">
+                  Humedad Ambiental
+                </p>
+                <h3
+                  id="valHumAire"
+                  class="text-3xl font-black text-cyan-400 mt-1"
+                >
+                  -- %
+                </h3>
+                <p id="lblMac" class="text-xs text-slate-500 mt-1">Nodo: --</p>
+              </div>
+              <div class="text-4xl bg-cyan-500/10 p-3 rounded-lg">💨</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div
+              class="lg:col-span-2 bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col shadow-lg"
+            >
+              <h3
+                class="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2"
+              >
+                <span>📈</span> Tendencias Agroclimáticas
+              </h3>
+              <div class="relative flex-grow min-h-[280px]">
+                <canvas id="chartTelemetria"></canvas>
+              </div>
+            </div>
+
+            <div
+              class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col shadow-lg"
+            >
+              <h3
+                class="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2"
+              >
+                <span>🗺️</span> Mapa de Nodos de Parcela
+              </h3>
+              <div
+                id="map"
+                class="w-full flex-grow min-h-[250px] rounded-lg z-10 border border-slate-700"
+              ></div>
+            </div>
+          </div>
+
+          <div
+            class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-lg"
+          >
+            <div
+              class="p-4 border-b border-slate-700 flex justify-between items-center"
+            >
+              <h3 class="text-sm font-semibold text-slate-300">
+                📋 Registros Telemétricos Filtrados
+              </h3>
+              <span class="text-xs text-slate-400"
+                >Actualización en tiempo real (5s)</span
+              >
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm text-slate-300">
+                <thead class="bg-slate-900 text-xs text-slate-400 uppercase">
+                  <tr>
+                    <th class="p-3">ID</th>
+                    <th class="p-3">Dispositivo</th>
+                    <th class="p-3">Parcela / Cultivo</th>
+                    <th class="p-3">Temp (°C)</th>
+                    <th class="p-3">H. Suelo (%)</th>
+                    <th class="p-3">H. Aire (%)</th>
+                    <th class="p-3">Fecha / Hora</th>
+                  </tr>
+                </thead>
+                <tbody
+                  id="tablaCuerpo"
+                  class="divide-y divide-slate-700"
+                ></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="js/panel.js"></script>
+  </body>
+</html>

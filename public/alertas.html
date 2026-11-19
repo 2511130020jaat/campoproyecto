@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASIR - Actualidad Agraria y Clima</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/alertas.js" defer></script>
+  </head>
+  <body class="bg-slate-900 text-slate-100 font-sans flex min-h-screen">
+    <div id="sidebar-container"></div>
+
+    <main class="flex-grow p-4 md:p-6 space-y-8 min-w-0">
+      <!-- Encabezado -->
+      <header
+        class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700/80 pb-4"
+      >
+        <div class="flex items-center gap-3">
+          <button id="btnMenu" class="lg:hidden text-2xl text-slate-300">
+            ☰
+          </button>
+          <div>
+            <h2 class="text-xl font-bold text-sky-400">
+              🌱 Actualidad Agroclimática y Boletines
+            </h2>
+            <p id="lblSubtituloBienvenida" class="text-xs text-slate-400">
+              Novedades del sector agrícola, tendencias de riego y clima en tus
+              parcelas
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span
+            id="badgeCacheNoticias"
+            class="text-[11px] font-mono bg-slate-800 text-slate-400 border border-slate-700 px-3 py-1.5 rounded-xl"
+          >
+            📰 Cargando boletín...
+          </span>
+          <button
+            type="button"
+            onclick="cargarNoticiasAgro(true)"
+            title="Actualizar noticias ahora"
+            class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition"
+          >
+            🔄 Actualizar
+          </button>
+        </div>
+      </header>
+
+      <!-- BLOQUE 1: Carrusel Principal (Más alto y espacioso) -->
+      <section
+        id="contenedorCarrusel"
+        onmouseenter="pausarCarrusel()"
+        onmouseleave="reanudarCarrusel()"
+        class="relative w-full h-[380px] sm:h-[430px] rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-slate-800"
+      >
+        <div id="slidesCarrusel" class="w-full h-full relative">
+          <div
+            class="w-full h-full flex items-center justify-center text-slate-400 text-sm"
+          >
+            Cargando titulares destacados...
+          </div>
+        </div>
+
+        <!-- Botones Anterior / Siguiente -->
+        <button
+          type="button"
+          onclick="moverCarrusel(-1)"
+          class="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 bg-slate-950/75 hover:bg-slate-900 text-white w-10 h-10 rounded-full flex items-center justify-center border border-slate-700 transition shadow-lg"
+        >
+          ❮
+        </button>
+        <button
+          type="button"
+          onclick="moverCarrusel(1)"
+          class="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 bg-slate-950/75 hover:bg-slate-900 text-white w-10 h-10 rounded-full flex items-center justify-center border border-slate-700 transition shadow-lg"
+        >
+          ❯
+        </button>
+
+        <!-- Indicadores inferiores -->
+        <div
+          id="indicadoresCarrusel"
+          class="absolute bottom-4 right-6 z-20 flex items-center gap-2"
+        ></div>
+      </section>
+
+      <!-- BLOQUE 2: Tarjetas de Más Noticias del Sector -->
+      <section class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h3
+            class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2"
+          >
+            <span>📰</span> Más Noticias y Artículos del Sector
+          </h3>
+          <span class="text-xs text-slate-500"
+            >Actualización automática cada 3 días</span
+          >
+        </div>
+
+        <div
+          id="gridNoticiasSecundarias"
+          class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
+        >
+          <div class="col-span-full text-center text-xs text-slate-400 py-8">
+            Cargando artículos...
+          </div>
+        </div>
+      </section>
+
+      <!-- BLOQUE 3: Pulso Minimalista de Parcelas y Clima -->
+      <section class="pt-4 border-t border-slate-800 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3
+            class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2"
+          >
+            <span>🌤️</span> Vista Rápida de Clima y Campos
+          </h3>
+          <a
+            href="/panel.html"
+            class="text-xs text-sky-400 hover:text-sky-300 font-semibold transition"
+          >
+            Ir a Monitoreo completo →
+          </a>
+        </div>
+
+        <div
+          id="gridPulsoMinimalista"
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+        >
+          <div class="col-span-full text-xs text-slate-500 py-3">
+            Sincronizando clima de parcelas...
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

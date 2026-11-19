@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ASIR - Redireccionando...</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body
+    class="bg-slate-900 text-slate-100 font-sans min-h-screen flex items-center justify-center"
+  >
+    <div class="text-center space-y-3">
+      <span class="text-5xl animate-bounce inline-block">🌱</span>
+      <p class="text-sm text-slate-400 font-semibold">
+        Cargando plataforma ASIR...
+      </p>
+    </div>
+    <script>
+      const usuario = localStorage.getItem("usuario_asir");
+      if (usuario) {
+        window.location.href = "/acceso.html";
+      } else {
+        window.location.href = "/panel.html";
+      }
+    </script>
+  </body>
+</html>

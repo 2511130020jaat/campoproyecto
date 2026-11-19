@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASIR - Gestor de Parcelas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/parcelas.js" defer></script>
+  </head>
+  <body class="bg-slate-900 text-slate-100 font-sans flex min-h-screen">
+    <div id="sidebar-container"></div>
+
+    <main class="flex-grow p-4 md:p-6 space-y-6 min-w-0">
+      <header class="flex items-center gap-3 border-b border-slate-700 pb-4">
+        <button id="btnMenu" class="lg:hidden text-2xl text-slate-300">
+          ☰
+        </button>
+        <div>
+          <h2 class="text-xl font-bold text-sky-400">
+            🗺️ Gestor de Parcelas y Contornos
+          </h2>
+          <p class="text-xs text-slate-400">
+            Delimita los vértices exactos de tu terreno sobre la vista satelital
+            y vincula módulos ESP32
+          </p>
+        </div>
+      </header>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Formulario de Alta / Edición -->
+        <div
+          class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl lg:col-span-1 h-fit"
+        >
+          <h3
+            id="formTitulo"
+            class="text-sm font-bold text-slate-200 mb-4 flex items-center gap-2"
+          >
+            <span>➕</span> Registrar Nuevo Campo
+          </h3>
+
+          <form
+            id="formNuevaParcela"
+            onsubmit="guardarParcela(event)"
+            class="space-y-4"
+          >
+            <input type="hidden" id="editParcelaId" value="" />
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1"
+                >Nombre del Sector / Parcela *</label
+              >
+              <input
+                type="text"
+                id="txtNombreParcela"
+                required
+                placeholder="Ej. Huerto Norte - Lote A"
+                class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1"
+                >Tipo de Cultivo</label
+              >
+              <input
+                type="text"
+                id="txtCultivo"
+                placeholder="Ej. Palto Hass, Vid, Maíz"
+                class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+
+            <!-- Resumen del Polígono Trazado -->
+            <div
+              class="bg-slate-900/90 p-3.5 rounded-xl border border-emerald-500/30 space-y-2"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-emerald-400"
+                  >📐 Contorno del Terreno</span
+                >
+                <span
+                  id="badgeVertices"
+                  class="text-[11px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded"
+                >
+                  0 vértices
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="bg-slate-800/80 p-2 rounded-lg">
+                  <span class="block text-[10px] text-slate-400"
+                    >Área Calculada</span
+                  >
+                  <span
+                    id="lblAreaParcela"
+                    class="font-mono font-bold text-slate-200"
+                    >0 m² (0.00 ha)</span
+                  >
+                </div>
+                <div class="bg-slate-800/80 p-2 rounded-lg">
+                  <span class="block text-[10px] text-slate-400"
+                    >Perímetro</span
+                  >
+                  <span
+                    id="lblPerimetroParcela"
+                    class="font-mono font-bold text-slate-200"
+                    >0.0 m</span
+                  >
+                </div>
+              </div>
+              <p class="text-[11px] text-slate-400">
+                Haz clic en las esquinas de tu terreno en el mapa para trazar su
+                forma exacta.
+              </p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1"
+                  >Latitud Centro</label
+                >
+                <input
+                  type="number"
+                  step="any"
+                  id="txtLatitud"
+                  oninput="actualizarMarcadorDesdeInputs()"
+                  placeholder="-12.6581"
+                  class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 font-mono focus:outline-none focus:border-sky-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1"
+                  >Longitud Centro</label
+                >
+                <input
+                  type="number"
+                  step="any"
+                  id="txtLongitud"
+                  oninput="actualizarMarcadorDesdeInputs()"
+                  placeholder="-76.6321"
+                  class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 font-mono focus:outline-none focus:border-sky-500"
+                />
+              </div>
+            </div>
+
+            <div class="pt-2 border-t border-slate-700">
+              <label class="block text-xs font-semibold text-sky-400 mb-1"
+                >📡 Código MAC ESP32 (Opcional)</label
+              >
+              <input
+                type="text"
+                id="txtMacESP32"
+                placeholder="Ej. ESP32-001"
+                class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2.5 font-mono focus:outline-none focus:border-sky-500"
+              />
+            </div>
+
+            <div class="flex gap-2 pt-1">
+              <button
+                type="submit"
+                id="btnGuardarParcela"
+                class="flex-grow bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-lg"
+              >
+                Guardar Parcela
+              </button>
+              <button
+                type="button"
+                id="btnCancelarEdicion"
+                onclick="cancelarEdicion()"
+                class="hidden bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold px-4 py-2.5 rounded-xl text-xs transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Columna Derecha: Mapa Satelital + Tabla -->
+        <div class="lg:col-span-2 space-y-6">
+          <div
+            class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl"
+          >
+            <div
+              class="p-3.5 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2"
+            >
+              <div class="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  id="btnModoPoligono"
+                  onclick="cambiarModoMapa('POLIGONO')"
+                  class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition shadow"
+                >
+                  ✏️ Marcar Contorno
+                </button>
+                <button
+                  type="button"
+                  id="btnModoPunto"
+                  onclick="cambiarModoMapa('PUNTO')"
+                  class="bg-slate-900 text-slate-300 hover:text-white border border-slate-700 text-xs px-3 py-1.5 rounded-lg font-semibold transition"
+                >
+                  📍 Solo Punto
+                </button>
+                <button
+                  type="button"
+                  onclick="deshacerUltimoVertice()"
+                  class="bg-slate-900 hover:bg-slate-700 text-amber-300 border border-slate-700 text-xs px-2.5 py-1.5 rounded-lg font-semibold transition"
+                >
+                  ↩️ Deshacer
+                </button>
+                <button
+                  type="button"
+                  onclick="limpiarPoligonoActual()"
+                  class="bg-slate-900 hover:bg-rose-500/20 text-rose-300 border border-slate-700 text-xs px-2.5 py-1.5 rounded-lg font-semibold transition"
+                >
+                  🧹 Limpiar Borde
+                </button>
+              </div>
+
+              <button
+                type="button"
+                id="btnCapaMapa"
+                onclick="alternarCapaMapa()"
+                class="bg-slate-900 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs px-3 py-1.5 rounded-lg font-semibold transition"
+              >
+                🗺️ Vista Calles
+              </button>
+            </div>
+
+            <div id="mapaParcelas" class="w-full h-96 z-10"></div>
+          </div>
+
+          <!-- Tabla de Campos Registrados -->
+          <div
+            class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl"
+          >
+            <div
+              class="p-4 border-b border-slate-700 flex justify-between items-center"
+            >
+              <h3 class="text-sm font-bold text-slate-200">
+                Mis Campos Agrícolas
+              </h3>
+              <span id="contadorParcelas" class="text-xs text-slate-400"
+                >0 sectores</span
+              >
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm text-slate-300">
+                <thead class="bg-slate-900 text-xs text-slate-400 uppercase">
+                  <tr>
+                    <th class="p-3">ID</th>
+                    <th class="p-3">Nombre</th>
+                    <th class="p-3">Cultivo</th>
+                    <th class="p-3">Área</th>
+                    <th class="p-3">MAC ESP32</th>
+                    <th class="p-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody
+                  id="listaParcelas"
+                  class="divide-y divide-slate-700"
+                ></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

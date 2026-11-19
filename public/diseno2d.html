@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASIR - Diseñador 2D e IO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/diseno2d.js" defer></script>
+  </head>
+  <body class="bg-slate-900 text-slate-100 font-sans flex min-h-screen">
+    <div id="sidebar-container"></div>
+
+    <main class="flex-grow p-4 md:p-6 space-y-5 min-w-0">
+      <!-- Encabezado -->
+      <header
+        class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700 pb-4"
+      >
+        <div class="flex items-center gap-3">
+          <button id="btnMenu" class="lg:hidden text-2xl text-slate-300">
+            ☰
+          </button>
+          <div>
+            <h2 class="text-xl font-bold text-sky-400">
+              📐 Diseñador 2D e Investigación Operativa
+            </h2>
+            <p class="text-xs text-slate-400">
+              Optimización hidráulica PVC, red Mesh y vista aérea
+              georreferenciada de la parcela
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <select
+            id="selParcelaDiseno"
+            onchange="cargarDisenoParcela()"
+            class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2.5 font-semibold focus:outline-none focus:border-sky-500"
+          >
+            <option value="">Cargando parcelas...</option>
+          </select>
+
+          <button
+            onclick="guardarDisenoActual()"
+            class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-lg flex items-center gap-1.5"
+          >
+            <span>💾</span> Guardar Plano
+          </button>
+        </div>
+      </header>
+
+      <!-- KPIs de Investigación Operativa -->
+      <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div
+          class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg flex items-center justify-between"
+        >
+          <div>
+            <p class="text-[11px] uppercase font-bold text-slate-400">
+              Tubería PVC Óptima (MST)
+            </p>
+            <h3
+              id="kpiMetrosPvc"
+              class="text-2xl font-black text-sky-400 mt-0.5"
+            >
+              0.0 m
+            </h3>
+            <p id="kpiTramosPvc" class="text-[11px] text-slate-500 mt-0.5">
+              0 tramos conectados
+            </p>
+          </div>
+          <span class="text-3xl bg-sky-500/10 p-2.5 rounded-lg">🚰</span>
+        </div>
+
+        <div
+          class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg flex items-center justify-between"
+        >
+          <div>
+            <p class="text-[11px] uppercase font-bold text-slate-400">
+              Costo Estimado Hidráulico
+            </p>
+            <h3
+              id="kpiCostoPvc"
+              class="text-2xl font-black text-amber-400 mt-0.5"
+            >
+              S/ 0.00
+            </h3>
+            <p class="text-[11px] text-slate-500 mt-0.5">
+              Según tarifa por metro lineal
+            </p>
+          </div>
+          <span class="text-3xl bg-amber-500/10 p-2.5 rounded-lg">💰</span>
+        </div>
+
+        <div
+          class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg flex items-center justify-between"
+        >
+          <div>
+            <p class="text-[11px] uppercase font-bold text-slate-400">
+              Enlaces Red Mesh
+            </p>
+            <h3
+              id="kpiEnlacesMesh"
+              class="text-2xl font-black text-emerald-400 mt-0.5"
+            >
+              0 enlaces
+            </h3>
+            <p id="kpiEstadoMesh" class="text-[11px] text-slate-500 mt-0.5">
+              Cobertura óptima
+            </p>
+          </div>
+          <span class="text-3xl bg-emerald-500/10 p-2.5 rounded-lg">📡</span>
+        </div>
+
+        <div
+          class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg flex items-center justify-between"
+        >
+          <div>
+            <p class="text-[11px] uppercase font-bold text-slate-400">
+              Elementos en Plano
+            </p>
+            <h3
+              id="kpiTotalNodos"
+              class="text-2xl font-black text-purple-400 mt-0.5"
+            >
+              0 nodos
+            </h3>
+            <p id="kpiDetalleNodos" class="text-[11px] text-slate-500 mt-0.5">
+              0 bombas • 0 válvulas • 0 radio
+            </p>
+          </div>
+          <span class="text-3xl bg-purple-500/10 p-2.5 rounded-lg">📍</span>
+        </div>
+      </section>
+
+      <!-- Workspace Principal -->
+      <section class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Panel Lateral -->
+        <aside
+          class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl space-y-5 lg:col-span-1 h-fit"
+        >
+          <!-- 1. Herramientas -->
+          <div>
+            <h3
+              class="text-xs font-bold uppercase text-slate-400 tracking-wider mb-3"
+            >
+              1. Herramientas del Lienzo
+            </h3>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                data-tool="MOVER"
+                onclick="seleccionarHerramienta('MOVER')"
+                class="tool-btn bg-sky-600 text-white font-bold py-2.5 px-2 rounded-xl border border-sky-400/40 transition flex items-center justify-center gap-1.5"
+              >
+                <span>🖐️</span> Mover
+              </button>
+              <button
+                type="button"
+                data-tool="BOMBA"
+                onclick="seleccionarHerramienta('BOMBA')"
+                class="tool-btn bg-slate-900 text-slate-300 hover:text-white font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5"
+              >
+                <span>⛽</span> Bomba
+              </button>
+              <button
+                type="button"
+                data-tool="VALVULA"
+                onclick="seleccionarHerramienta('VALVULA')"
+                class="tool-btn bg-slate-900 text-slate-300 hover:text-white font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5"
+              >
+                <span>💧</span> Válvula
+              </button>
+              <button
+                type="button"
+                data-tool="NODO_ESP32"
+                onclick="seleccionarHerramienta('NODO_ESP32')"
+                class="tool-btn bg-slate-900 text-slate-300 hover:text-white font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5"
+              >
+                <span>📡</span> ESP32
+              </button>
+              <button
+                type="button"
+                data-tool="REPETIDOR"
+                onclick="seleccionarHerramienta('REPETIDOR')"
+                class="tool-btn bg-slate-900 text-slate-300 hover:text-white font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5"
+              >
+                <span>📶</span> Repetidor
+              </button>
+              <button
+                type="button"
+                data-tool="BORRAR"
+                onclick="seleccionarHerramienta('BORRAR')"
+                class="tool-btn bg-slate-900 text-rose-400 hover:bg-rose-500/20 font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5"
+              >
+                <span>🗑️</span> Borrar
+              </button>
+            </div>
+            <p id="lblAyudaHerramienta" class="text-[11px] text-sky-400 mt-2.5">
+              🖐️ Arrastra nodos, mueve el fondo o usa la rueda del ratón para
+              hacer zoom.
+            </p>
+          </div>
+
+          <!-- 2. Selector de 3 Modos de Fondo -->
+          <div class="border-t border-slate-700 pt-4 space-y-3">
+            <h3
+              class="text-xs font-bold uppercase text-emerald-400 tracking-wider"
+            >
+              2. Fondo del Lienzo
+            </h3>
+
+            <!-- Barra de 3 botones: Satélite | Ortofoto | Limpio -->
+            <div
+              class="grid grid-cols-3 gap-1 bg-slate-900 p-1 rounded-xl border border-slate-700 text-[11px]"
+            >
+              <button
+                type="button"
+                data-fondo="SATELITE"
+                onclick="cambiarModoFondo('SATELITE')"
+                class="fondo-btn bg-sky-600 text-white font-bold py-2 px-1 rounded-lg transition shadow text-center"
+              >
+                🛰️ Satélite
+              </button>
+              <button
+                type="button"
+                data-fondo="ORTOFOTO"
+                onclick="cambiarModoFondo('ORTOFOTO')"
+                class="fondo-btn text-slate-400 hover:text-white font-semibold py-2 px-1 rounded-lg transition text-center"
+              >
+                🖼️ Ortofoto
+              </button>
+              <button
+                type="button"
+                data-fondo="NINGUNO"
+                onclick="cambiarModoFondo('NINGUNO')"
+                class="fondo-btn text-slate-400 hover:text-white font-semibold py-2 px-1 rounded-lg transition text-center"
+              >
+                🧹 Limpio
+              </button>
+            </div>
+
+            <input
+              type="file"
+              id="inpArchivoOrtofoto"
+              accept="image/*"
+              onchange="cargarOrtofotoDesdeArchivo(event)"
+              class="hidden"
+            />
+
+            <!-- Botón de carga (visible en modo Ortofoto) -->
+            <div id="panelSubirOrtofoto" class="hidden">
+              <button
+                type="button"
+                onclick="document.getElementById('inpArchivoOrtofoto').click()"
+                class="w-full bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-bold py-2 px-3 rounded-xl text-xs transition flex items-center justify-center gap-2"
+              >
+                <span>📂</span>
+                <span id="txtBtnSubirOrto">Subir Ortofoto / Captura HD</span>
+              </button>
+            </div>
+
+            <!-- Controles de Opacidad y Calibración (se ocultan en modo Limpio) -->
+            <div
+              id="panelControlesFondo"
+              class="bg-slate-900/90 p-3 rounded-xl border border-slate-700 space-y-2.5 text-xs"
+            >
+              <div>
+                <div class="flex justify-between text-[11px] text-slate-400">
+                  <span>Opacidad</span>
+                  <span id="valOpacidadOrto" class="font-mono text-slate-200"
+                    >65%</span
+                  >
+                </div>
+                <input
+                  type="range"
+                  id="rngOpacidadOrto"
+                  min="10"
+                  max="100"
+                  value="65"
+                  oninput="actualizarCalibracionOrtofoto()"
+                  class="w-full accent-emerald-500"
+                />
+              </div>
+
+              <!-- Ajustes geométricos (solo visibles cuando hay una ortofoto propia) -->
+              <div
+                id="controlesManualesOrtofoto"
+                class="hidden space-y-2.5 pt-2 border-t border-slate-800"
+              >
+                <div>
+                  <div class="flex justify-between text-[11px] text-slate-400">
+                    <span>Escala Imagen</span>
+                    <span id="valEscalaOrto" class="font-mono text-slate-200"
+                      >100%</span
+                    >
+                  </div>
+                  <input
+                    type="range"
+                    id="rngEscalaOrto"
+                    min="30"
+                    max="250"
+                    value="100"
+                    oninput="actualizarCalibracionOrtofoto()"
+                    class="w-full accent-sky-500"
+                  />
+                </div>
+
+                <div>
+                  <div class="flex justify-between text-[11px] text-slate-400">
+                    <span>Rotación</span>
+                    <span id="valRotacionOrto" class="font-mono text-slate-200"
+                      >0°</span
+                    >
+                  </div>
+                  <input
+                    type="range"
+                    id="rngRotacionOrto"
+                    min="-180"
+                    max="180"
+                    value="0"
+                    oninput="actualizarCalibracionOrtofoto()"
+                    class="w-full accent-sky-500"
+                  />
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <span class="block text-[10px] text-slate-400"
+                      >Mover X (m)</span
+                    >
+                    <input
+                      type="number"
+                      step="0.5"
+                      id="inpOffsetXOrto"
+                      value="0"
+                      oninput="actualizarCalibracionOrtofoto()"
+                      class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded p-1 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <span class="block text-[10px] text-slate-400"
+                      >Mover Y (m)</span
+                    >
+                    <input
+                      type="number"
+                      step="0.5"
+                      id="inpOffsetYOrto"
+                      value="0"
+                      oninput="actualizarCalibracionOrtofoto()"
+                      class="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded p-1 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Dimensiones y Costos -->
+          <div class="border-t border-slate-700 pt-4 space-y-3">
+            <h3
+              class="text-xs font-bold uppercase text-slate-400 tracking-wider"
+            >
+              3. Dimensiones y Costos
+            </h3>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1"
+                  >Ancho Área (m)</label
+                >
+                <input
+                  type="number"
+                  id="inpAnchoMetros"
+                  value="100"
+                  min="10"
+                  max="2000"
+                  oninput="recalcularYRedibujar()"
+                  class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
+                />
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1"
+                  >Largo Área (m)</label
+                >
+                <input
+                  type="number"
+                  id="inpAltoMetros"
+                  value="80"
+                  min="10"
+                  max="2000"
+                  oninput="recalcularYRedibujar()"
+                  class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1"
+                  >Costo PVC (S/ / m)</label
+                >
+                <input
+                  type="number"
+                  step="0.1"
+                  id="inpCostoPvc"
+                  value="4.50"
+                  min="0.1"
+                  oninput="recalcularYRedibujar()"
+                  class="w-full bg-slate-900 border border-slate-700 text-amber-400 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
+                />
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1"
+                  >Alcance Mesh (m)</label
+                >
+                <input
+                  type="number"
+                  id="inpAlcanceMesh"
+                  value="50"
+                  min="5"
+                  max="1000"
+                  oninput="recalcularYRedibujar()"
+                  class="w-full bg-slate-900 border border-slate-700 text-emerald-400 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Capas -->
+          <div class="border-t border-slate-700 pt-4 space-y-2">
+            <h3
+              class="text-xs font-bold uppercase text-slate-400 tracking-wider"
+            >
+              4. Capas de Optimización
+            </h3>
+
+            <label
+              class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                id="chkCapaPvc"
+                checked
+                onchange="redibujarLienzo()"
+                class="rounded bg-slate-900 border-slate-600 text-sky-500"
+              />
+              <span>🚰 Ruta Óptima Tuberías PVC</span>
+            </label>
+
+            <label
+              class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                id="chkCapaMesh"
+                checked
+                onchange="redibujarLienzo()"
+                class="rounded bg-slate-900 border-slate-600 text-emerald-500"
+              />
+              <span>📡 Enlaces Inalámbricos Mesh</span>
+            </label>
+          </div>
+
+          <div class="border-t border-slate-700 pt-4 flex gap-2">
+            <button
+              type="button"
+              onclick="generarPlantillaEjemplo()"
+              class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold py-2 rounded-xl transition"
+            >
+              ⚡ Demo
+            </button>
+            <button
+              type="button"
+              onclick="limpiarLienzo()"
+              class="flex-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-semibold py-2 rounded-xl transition"
+            >
+              🧹 Limpiar
+            </button>
+          </div>
+        </aside>
+
+        <!-- Área del Lienzo Interactivo 2D -->
+        <div
+          class="lg:col-span-3 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden flex flex-col"
+        >
+          <div
+            class="p-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 bg-slate-800/80"
+          >
+            <div
+              class="flex flex-wrap items-center gap-3 text-[11px] text-slate-300"
+            >
+              <span class="flex items-center gap-1"
+                ><span
+                  class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"
+                ></span>
+                Bomba</span
+              >
+              <span class="flex items-center gap-1"
+                ><span
+                  class="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block"
+                ></span>
+                Válvula</span
+              >
+              <span class="flex items-center gap-1"
+                ><span
+                  class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"
+                ></span>
+                ESP32</span
+              >
+              <span class="flex items-center gap-1"
+                ><span
+                  class="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block"
+                ></span>
+                Repetidor</span
+              >
+              <span class="text-slate-600">|</span>
+              <span class="text-sky-400 font-semibold">━━ PVC</span>
+              <span class="text-emerald-400 font-semibold">┅┅ Mesh</span>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                onclick="cambiarZoomCanvas(-0.2)"
+                class="bg-slate-900 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-2.5 py-1 rounded-lg"
+              >
+                ➖
+              </button>
+              <span
+                id="lblNivelZoom"
+                class="text-xs font-mono text-sky-400 bg-slate-900 px-2 py-1 rounded-lg border border-slate-700"
+              >
+                100%
+              </span>
+              <button
+                type="button"
+                onclick="cambiarZoomCanvas(0.2)"
+                class="bg-slate-900 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-2.5 py-1 rounded-lg"
+              >
+                ➕
+              </button>
+              <button
+                type="button"
+                onclick="resetearVistaCanvas()"
+                class="bg-slate-900 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs px-2.5 py-1 rounded-lg"
+              >
+                Centrar
+              </button>
+              <span
+                id="lblCoordsCursor"
+                class="text-xs font-mono text-slate-400 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700"
+              >
+                X: 0.0 m | Y: 0.0 m
+              </span>
+            </div>
+          </div>
+
+          <div
+            id="contenedorCanvas2d"
+            class="relative w-full h-[560px] bg-slate-950 flex-grow overflow-hidden"
+          >
+            <canvas
+              id="canvasDiseno2d"
+              class="w-full h-full cursor-crosshair block"
+            ></canvas>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
