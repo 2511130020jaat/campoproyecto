@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASIR - Acceso a la Plataforma</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body
+    class="bg-slate-900 text-slate-100 font-sans min-h-screen flex items-center justify-center p-4"
+  >
+    <div
+      class="w-full max-w-md bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 shadow-2xl"
+    >
+      <div class="text-center mb-6">
+        <span class="text-5xl">🌱</span>
+        <h1 class="text-2xl font-extrabold text-sky-400 tracking-wider mt-2">
+          ASIR
+        </h1>
+        <p class="text-xs text-slate-400">
+          Plataforma SaaS de Telemetría y Riego Inteligente
+        </p>
+      </div>
+
+      <div
+        class="flex bg-slate-900 p-1 rounded-xl mb-6 border border-slate-700"
+      >
+        <button
+          id="tabLogin"
+          onclick="mostrarForm('login')"
+          class="w-1/2 py-2 text-xs font-bold rounded-lg bg-sky-600 text-white transition"
+        >
+          Iniciar Sesión
+        </button>
+        <button
+          id="tabRegistro"
+          onclick="mostrarForm('registro')"
+          class="w-1/2 py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition"
+        >
+          Crear Cuenta
+        </button>
+      </div>
+
+      <div
+        id="msgAlerta"
+        class="hidden mb-4 p-3 rounded-lg text-xs font-semibold text-center"
+      ></div>
+
+      <form id="formLogin" onsubmit="ejecutarLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1"
+            >Correo Electrónico</label
+          >
+          <input
+            type="email"
+            id="loginCorreo"
+            required
+            placeholder="demo@asir.com"
+            class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg p-2.5 focus:outline-none focus:border-sky-500"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1"
+            >Contraseña</label
+          >
+          <input
+            type="password"
+            id="loginClave"
+            required
+            placeholder="••••••••"
+            class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg p-2.5 focus:outline-none focus:border-sky-500"
+          />
+        </div>
+        <button
+          type="submit"
+          class="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-lg text-sm transition shadow-lg"
+        >
+          Ingresar al Panel
+        </button>
+      </form>
+
+      <form
+        id="formRegistro"
+        onsubmit="ejecutarRegistro(event)"
+        class="space-y-4 hidden"
+      >
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1"
+            >Nombre Completo</label
+          >
+          <input
+            type="text"
+            id="regNombre"
+            required
+            placeholder="Juan Pérez"
+            class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg p-2.5 focus:outline-none focus:border-sky-500"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1"
+            >Correo Electrónico</label
+          >
+          <input
+            type="email"
+            id="regCorreo"
+            required
+            placeholder="tu@campo.com"
+            class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg p-2.5 focus:outline-none focus:border-sky-500"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1"
+            >Contraseña</label
+          >
+          <input
+            type="password"
+            id="regClave"
+            required
+            placeholder="••••••••"
+            class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg p-2.5 focus:outline-none focus:border-sky-500"
+          />
+        </div>
+        <button
+          type="submit"
+          class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg text-sm transition shadow-lg"
+        >
+          Registrar Mi Cuenta
+        </button>
+      </form>
+    </div>
+
+    <script src="/js/acceso.js"></script>
+  </body>
+</html>

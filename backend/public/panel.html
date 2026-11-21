@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASIR - Sensores en Vivo (ESP32)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/panel.js" defer></script>
+  </head>
+  <body class="bg-slate-900 text-slate-100 font-sans flex min-h-screen">
+    <div id="sidebar-container"></div>
+
+    <main class="flex-grow p-4 md:p-6 space-y-8 min-w-0">
+      <!-- Encabezado y Filtro por Parcela / Nodo -->
+      <header
+        class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700/80 pb-4"
+      >
+        <div class="flex items-center gap-3">
+          <button id="btnMenu" class="lg:hidden text-2xl text-slate-300">
+            ☰
+          </button>
+          <div>
+            <h2 class="text-xl font-bold text-sky-400">
+              📡 Sensores en Vivo y Telemetría ESP32
+            </h2>
+            <p class="text-xs text-slate-400">
+              Estado de conexión individual por nodo físico, lecturas de suelo y
+              registro de paquetes entrantes
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+          <span
+            id="badgeEstadoLive"
+            class="text-[11px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-xl"
+          >
+            🟢 En vivo (5s)
+          </span>
+
+          <select
+            id="selFiltroParcelaPanel"
+            onchange="seleccionarParcelaPanel()"
+            class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3.5 py-2 font-semibold focus:outline-none focus:border-sky-500"
+          >
+            <option value="">Cargando nodos...</option>
+          </select>
+
+          <button
+            type="button"
+            onclick="actualizarTelemetriaVivo()"
+            title="Forzar lectura ahora"
+            class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition"
+          >
+            🔄
+          </button>
+        </div>
+      </header>
+
+      <!-- BLOQUE 1: TARJETAS INDIVIDUALES POR NODO ESP32 -->
+      <section class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3
+              class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2"
+            >
+              <span>🔌</span> Nodos de Campo Registrados
+            </h3>
+            <p class="text-xs text-slate-400">
+              Haz clic sobre cualquier placa ESP32 para inspeccionar sus curvas
+              en tiempo real
+            </p>
+          </div>
+          <span id="lblConteoNodos" class="text-xs font-mono text-slate-400">
+            0 nodos activos
+          </span>
+        </div>
+
+        <div
+          id="gridNodosEsp32"
+          class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+        >
+          <div class="col-span-full text-center text-xs text-slate-400 py-8">
+            Detectando placas ESP32 vinculadas...
+          </div>
+        </div>
+      </section>
+
+      <hr class="border-slate-800" />
+
+      <!-- BLOQUE 2: GRÁFICAS EN VIVO DEL NODO SELECCIONADO -->
+      <section class="space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3
+              id="lblNodoSeleccionadoTitulo"
+              class="text-sm font-bold uppercase tracking-wider text-sky-400 flex items-center gap-2"
+            >
+              <span>📈</span> Curvas en Tiempo Real
+            </h3>
+            <p class="text-xs text-slate-400">
+              Evolución minuto a minuto separada por magnitud física para evitar
+              cruce de escalas
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Gráfica A: Humedad de Suelo y Aire (%) -->
+          <div
+            class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl space-y-3"
+          >
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-sm font-bold text-emerald-400">
+                  💧 Humedad del Suelo y Ambiente (%)
+                </h4>
+                <p class="text-[11px] text-slate-400">
+                  Lectura capacitiva radicular frente a humedad relativa del
+                  aire
+                </p>
+              </div>
+            </div>
+            <div class="relative h-[240px] w-full">
+              <canvas id="chartSensorHumedad"></canvas>
+            </div>
+          </div>
+
+          <!-- Gráfica B: Temperatura en Campo (°C) -->
+          <div
+            class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl space-y-3"
+          >
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-sm font-bold text-amber-400">
+                  🌡️ Temperatura Captada en Parcela (°C)
+                </h4>
+                <p class="text-[11px] text-slate-400">
+                  Registro térmico directo del sensor DHT/DS18B20 en campo
+                </p>
+              </div>
+            </div>
+            <div class="relative h-[240px] w-full">
+              <canvas id="chartSensorTemperatura"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr class="border-slate-800" />
+
+      <!-- BLOQUE 3: TABLA TÉCNICA DE ÚLTIMOS PAQUETES RECIBIDOS -->
+      <section
+        class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl"
+      >
+        <div
+          class="p-4 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2"
+        >
+          <div>
+            <h3 class="text-sm font-bold text-slate-200">
+              🧾 Últimos Paquetes Telemétricos Recibidos
+            </h3>
+            <p class="text-[11px] text-slate-400">
+              Historial crudo de transmisiones enviadas por el microcontrolador
+            </p>
+          </div>
+          <span id="lblTotalPaquetes" class="text-xs font-mono text-slate-400">
+            0 registros
+          </span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900 text-[11px] text-slate-400 uppercase">
+              <tr>
+                <th class="p-3">Hora Registro</th>
+                <th class="p-3">Parcela / Nodo</th>
+                <th class="p-3">Hum. Suelo</th>
+                <th class="p-3">Temperatura</th>
+                <th class="p-3">Hum. Aire</th>
+                <th class="p-3 text-right">Estado Lectura</th>
+              </tr>
+            </thead>
+            <tbody
+              id="tablaTelemetriaVivo"
+              class="divide-y divide-slate-700/80"
+            >
+              <tr>
+                <td colspan="6" class="p-6 text-center text-slate-500">
+                  Esperando paquetes del sensor...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
