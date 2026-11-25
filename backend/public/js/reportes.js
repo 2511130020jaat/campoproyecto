@@ -24,6 +24,7 @@ let datosReporte = {
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
+  seleccionarCategoria(categoriaSeleccionada);
   aplicarRangoRapido(7, false);
   await cargarListaParcelasFiltro();
   await cargarDatosReporte();
@@ -166,9 +167,37 @@ function seleccionarCategoria(cat) {
 
   document.querySelectorAll(".btn-categoria").forEach((btn) => {
     const activo = btn.dataset.cat === cat;
+    const textos = btn.querySelectorAll("p");
+    const titulo = textos[0];
+    const desc = textos[1];
+
     btn.className = activo
-      ? "btn-categoria text-left p-4 rounded-2xl border-2 border-sky-500 bg-sky-500/10 transition"
-      : "btn-categoria text-left p-4 rounded-2xl border border-slate-700 bg-slate-800/70 hover:border-slate-600 transition";
+      ? "btn-categoria text-left p-4 rounded-2xl border-2 border-sky-500 transition"
+      : "btn-categoria text-left p-4 rounded-2xl border transition";
+
+    if (activo) {
+      btn.style.background = "rgba(14, 165, 233, 0.14)";
+      btn.style.borderColor = "#0ea5e9";
+      if (titulo) {
+        titulo.className = "text-sm font-bold";
+        titulo.style.color = "var(--asir-text, #e2e8f0)";
+      }
+      if (desc) {
+        desc.className = "text-xs mt-1 leading-relaxed";
+        desc.style.color = "var(--asir-text-muted, #94a3b8)";
+      }
+    } else {
+      btn.style.background = "var(--asir-surface, #1e293b)";
+      btn.style.borderColor = "var(--asir-border, #334155)";
+      if (titulo) {
+        titulo.className = "text-sm font-bold";
+        titulo.style.color = "var(--asir-text, #e2e8f0)";
+      }
+      if (desc) {
+        desc.className = "text-xs mt-1 leading-relaxed";
+        desc.style.color = "var(--asir-text-muted, #94a3b8)";
+      }
+    }
   });
 
   const estructuras = {

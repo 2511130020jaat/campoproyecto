@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
@@ -8,12 +8,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="/css/asir-theme.css" />
+    <script src="/js/theme.js"></script>
 
     <script src="/js/auth.js"></script>
     <script src="/js/sidebar.js"></script>
     <script src="/js/reportes.js" defer></script>
   </head>
-  <body class="bg-slate-900 text-slate-100 font-sans flex min-h-screen">
+  <body class="font-sans flex min-h-screen">
     <div id="sidebar-container"></div>
 
     <main class="flex-grow p-4 md:p-6 space-y-6 min-w-0">
@@ -53,8 +55,10 @@
               class="btn-categoria text-left p-4 rounded-2xl border-2 border-sky-500 bg-sky-500/10 transition"
             >
               <span class="text-2xl block mb-2">📑</span>
-              <p class="text-sm font-bold text-white">Informe Integral</p>
-              <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+              <p class="text-sm font-bold text-slate-900 dark:text-white">
+                Informe Integral
+              </p>
+              <p class="text-xs text-slate-700 mt-1 leading-relaxed">
                 Dossier completo con ingeniería 2D, sensores y riego.
               </p>
             </button>
@@ -63,11 +67,11 @@
               type="button"
               data-cat="telemetria"
               onclick="seleccionarCategoria('telemetria')"
-              class="btn-categoria text-left p-4 rounded-2xl border border-slate-700 bg-slate-800/70 hover:border-slate-600 transition"
+              class="btn-categoria text-left p-4 rounded-2xl border border-slate-300 bg-slate-100 hover:border-slate-400 transition"
             >
               <span class="text-2xl block mb-2">📊</span>
-              <p class="text-sm font-bold text-slate-200">Telemetría y Clima</p>
-              <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+              <p class="text-sm font-bold text-slate-900">Telemetría y Clima</p>
+              <p class="text-xs text-slate-700 mt-1 leading-relaxed">
                 Registros históricos de humedad de suelo y temperatura.
               </p>
             </button>
@@ -76,11 +80,11 @@
               type="button"
               data-cat="ingenieria"
               onclick="seleccionarCategoria('ingenieria')"
-              class="btn-categoria text-left p-4 rounded-2xl border border-slate-700 bg-slate-800/70 hover:border-slate-600 transition"
+              class="btn-categoria text-left p-4 rounded-2xl border border-slate-300 bg-slate-100 hover:border-slate-400 transition"
             >
               <span class="text-2xl block mb-2">📐</span>
-              <p class="text-sm font-bold text-slate-200">Ingeniería 2D</p>
-              <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+              <p class="text-sm font-bold text-slate-900">Ingeniería 2D</p>
+              <p class="text-xs text-slate-700 mt-1 leading-relaxed">
                 Dimensiones, nodos instalados, red PVC y costos.
               </p>
             </button>
@@ -89,11 +93,11 @@
               type="button"
               data-cat="riego"
               onclick="seleccionarCategoria('riego')"
-              class="btn-categoria text-left p-4 rounded-2xl border border-slate-700 bg-slate-800/70 hover:border-slate-600 transition"
+              class="btn-categoria text-left p-4 rounded-2xl border border-slate-300 bg-slate-100 hover:border-slate-400 transition"
             >
               <span class="text-2xl block mb-2">💧</span>
-              <p class="text-sm font-bold text-slate-200">Bitácora de Riego</p>
-              <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+              <p class="text-sm font-bold text-slate-900">Bitácora de Riego</p>
+              <p class="text-xs text-slate-700 mt-1 leading-relaxed">
                 Horarios automáticos e historial de activaciones.
               </p>
             </button>

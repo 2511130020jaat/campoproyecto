@@ -1,4 +1,4 @@
-let mapaParcelas = null;
+﻿let mapaParcelas = null;
 let capaSatelite = null;
 let capaCalle = null;
 let esSatelite = true;
@@ -299,14 +299,14 @@ function generarSvgSiluetaParcela(poligono, diseno2d = null) {
     const circulosVertices = puntosSvg
       .map(
         (p) =>
-          `<circle cx="${p.x}" cy="${p.y}" r="3.2" fill="#34d399" stroke="#0f172a" stroke-width="1.2" />`,
+          `<circle cx="${p.x}" cy="${p.y}" r="3.2" fill="#00E5FF" stroke="#0f172a" stroke-width="1.2" />`,
       )
       .join("");
 
     return `
       <svg viewBox="0 0 ${W} ${H}" class="w-full h-full">
         ${cuadriculaSvg}
-        <polygon points="${pointsStr}" fill="rgba(16, 185, 129, 0.22)" stroke="#10b981" stroke-width="2.2" stroke-linejoin="round" />
+        <polygon points="${pointsStr}" fill="rgba(16, 185, 129, 0.22)" stroke="#00E5FF" stroke-width="2.2" stroke-linejoin="round" />
         ${circulosVertices}
       </svg>
     `;
@@ -327,10 +327,10 @@ function generarSvgSiluetaParcela(poligono, diseno2d = null) {
         const ny = ry + (parseFloat(n.y) || 0) * escala;
         const color =
           n.tipo === "BOMBA"
-            ? "#38bdf8"
+            ? "#00b4cc"
             : n.tipo === "VALVULA"
               ? "#f59e0b"
-              : "#10b981";
+              : "#00E5FF";
         return `<circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="3.5" fill="${color}" />`;
       })
       .join("");
@@ -338,7 +338,7 @@ function generarSvgSiluetaParcela(poligono, diseno2d = null) {
     return `
       <svg viewBox="0 0 ${W} ${H}" class="w-full h-full">
         ${cuadriculaSvg}
-        <rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}" rx="4" fill="rgba(14, 165, 233, 0.16)" stroke="#38bdf8" stroke-width="2" />
+        <rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}" rx="4" fill="rgba(14, 165, 233, 0.16)" stroke="#00b4cc" stroke-width="2" />
         ${nodosSvg}
         <text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="monospace">${anchoM}m × ${altoM}m</text>
       </svg>
@@ -349,7 +349,7 @@ function generarSvgSiluetaParcela(poligono, diseno2d = null) {
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-full">
       ${cuadriculaSvg}
       <rect x="65" y="28" width="130" height="74" rx="8" fill="rgba(51, 65, 85, 0.25)" stroke="#475569" stroke-width="1.5" stroke-dasharray="5,4" />
-      <circle cx="130" cy="65" r="5" fill="#10b981" />
+      <circle cx="130" cy="65" r="5" fill="#00E5FF" />
       <text x="130" y="92" text-anchor="middle" fill="#64748b" font-size="9" font-family="sans-serif">Punto GPS sin contorno</text>
     </svg>
   `;
@@ -550,9 +550,9 @@ function renderizarVistaDeCampo() {
 
       if (pol.length >= 3 && capaPoligonosGuardados) {
         const polyLayer = L.polygon(pol, {
-          color: "#10b981",
+          color: "#00E5FF",
           weight: 2.5,
-          fillColor: "#10b981",
+          fillColor: "#00E5FF",
           fillOpacity: 0.26,
         }).addTo(capaPoligonosGuardados);
 
@@ -582,7 +582,7 @@ function renderizarVistaDeCampo() {
       ) {
         L.circleMarker([parseFloat(p.latitud), parseFloat(p.longitud)], {
           radius: 8,
-          fillColor: "#38bdf8",
+          fillColor: "#00b4cc",
           color: "#ffffff",
           weight: 2,
           fillOpacity: 0.9,
@@ -883,7 +883,7 @@ function renderizarGraficaDetalleParcela(lecturas) {
         {
           label: "Hum. Suelo (%)",
           data: serie.map((d) => d.humedad_suelo),
-          borderColor: "#10b981",
+          borderColor: "#00E5FF",
           tension: 0.35,
           pointRadius: 2.5,
         },

@@ -1,4 +1,4 @@
-let parcelasNodos = [];
+﻿let parcelasNodos = [];
 let lecturasPorParcela = {};
 let parcelaSeleccionadaId = null;
 let chartHumedad = null;
@@ -376,8 +376,8 @@ function renderizarGraficasNodo(lecturas) {
     if (chartHumedad) chartHumedad.destroy();
     const ctxH = canvasHum.getContext("2d");
     const gradSuelo = ctxH.createLinearGradient(0, 0, 0, 220);
-    gradSuelo.addColorStop(0, "rgba(16, 185, 129, 0.3)");
-    gradSuelo.addColorStop(1, "rgba(16, 185, 129, 0.0)");
+    gradSuelo.addColorStop(0, "rgba(0, 229, 255, 0.18)");
+    gradSuelo.addColorStop(1, "rgba(0, 229, 255, 0.0)");
 
     chartHumedad = new Chart(ctxH, {
       type: "line",
@@ -387,7 +387,7 @@ function renderizarGraficasNodo(lecturas) {
           {
             label: "Hum. Suelo (%)",
             data: datosSuelo,
-            borderColor: "#10b981",
+            borderColor: "#00E5FF",
             backgroundColor: gradSuelo,
             fill: true,
             tension: 0.3,
@@ -396,7 +396,7 @@ function renderizarGraficasNodo(lecturas) {
           {
             label: "Hum. Aire (%)",
             data: datosAire,
-            borderColor: "#38bdf8",
+            borderColor: "#00b4cc",
             borderDash: [5, 4],
             tension: 0.3,
             pointRadius: 2.5,
@@ -409,18 +409,18 @@ function renderizarGraficasNodo(lecturas) {
         maintainAspectRatio: false,
         animation: false,
         plugins: {
-          legend: { labels: { color: "#cbd5e1", font: { size: 11 } } },
+          legend: { labels: { color: "#8fa8b8", font: { size: 11 } } },
         },
         scales: {
           x: {
-            ticks: { color: "#94a3b8", maxRotation: 0, maxTicksLimit: 6 },
-            grid: { color: "rgba(51, 65, 85, 0.4)" },
+            ticks: { color: "#4a6878", maxRotation: 0, maxTicksLimit: 6 },
+            grid: { color: "rgba(26, 45, 58, 0.7)" },
           },
           y: {
             min: 0,
             max: 100,
-            ticks: { color: "#34d399", callback: (v) => v + "%" },
-            grid: { color: "rgba(51, 65, 85, 0.4)" },
+            ticks: { color: "#00E5FF", callback: (v) => v + "%" },
+            grid: { color: "rgba(26, 45, 58, 0.7)" },
           },
         },
       },
@@ -456,18 +456,18 @@ function renderizarGraficasNodo(lecturas) {
         maintainAspectRatio: false,
         animation: false,
         plugins: {
-          legend: { labels: { color: "#cbd5e1", font: { size: 11 } } },
+          legend: { labels: { color: "#8fa8b8", font: { size: 11 } } },
         },
         scales: {
           x: {
-            ticks: { color: "#94a3b8", maxRotation: 0, maxTicksLimit: 6 },
-            grid: { color: "rgba(51, 65, 85, 0.4)" },
+            ticks: { color: "#4a6878", maxRotation: 0, maxTicksLimit: 6 },
+            grid: { color: "rgba(26, 45, 58, 0.7)" },
           },
           y: {
             suggestedMin: 10,
             suggestedMax: 38,
             ticks: { color: "#fbbf24", callback: (v) => v + "°C" },
-            grid: { color: "rgba(51, 65, 85, 0.4)" },
+            grid: { color: "rgba(26, 45, 58, 0.7)" },
           },
         },
       },

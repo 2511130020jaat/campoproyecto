@@ -1,65 +1,162 @@
-/* ==========================================================================
+﻿/* ==========================================================================
    SISTEMA DE TEMAS GLOBALES ASIR
-   1. "predeterminado": Azul-Petróleo Profundo + Acentos Neón Esmeralda/Cian
-   2. "oscuro": Grafito / Carbón Puro (Modo Nocturno Neutro)
-   3. "claro": Blanco / Perla (Modo Día para Campo)
+   Paleta basada en el logo oficial ASIR:
+     · Verde tech   #2CC56A  (octágono principal)
+     · Índigo/navy  #1E1E6E  (conectores del circuito)
+     · Negro        #080A09  (fondo del logo)
+     · Blanco       #F4FBF7  (elementos internos)
+   Tipografía: Inter (Google Fonts)
+   Temas: "predeterminado" (dark) · "oscuro" (dark neutro) · "claro" (light)
    ========================================================================== */
 
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+/* ── TEMA PREDETERMINADO — Dark Brand (verde ASIR sobre negro) ─────────── */
 :root,
 html[data-theme="predeterminado"] {
-  --asir-bg: #050b11;
-  --asir-bg-gradient: radial-gradient(
-    ellipse at top right,
-    rgba(16, 185, 129, 0.14),
-    rgba(6, 182, 212, 0.06) 42%,
-    #050b11 82%
+  /* Fondos */
+  --asir-bg: #080a09;
+  --asir-bg-gradient: linear-gradient(
+    160deg,
+    #080a09 0%,
+    #0a110d 60%,
+    #07090a 100%
   );
-  --asir-surface: linear-gradient(
-    145deg,
-    rgba(9, 25, 36, 0.9) 0%,
-    rgba(6, 16, 24, 0.95) 55%,
-    rgba(8, 29, 26, 0.9) 100%
-  );
-  --asir-subsurface: rgba(4, 12, 20, 0.65);
-  --asir-advice-bg: linear-gradient(
-    90deg,
-    rgba(6, 78, 59, 0.35) 0%,
-    rgba(8, 51, 68, 0.35) 100%
-  );
-  --asir-border: rgba(16, 185, 129, 0.25);
-  --asir-border-hover: rgba(52, 211, 153, 0.68);
-  --asir-glow: 0 0 24px rgba(16, 185, 129, 0.14);
-  --asir-text: #f1f5f9;
-  --asir-text-muted: #94a3b8;
-  --asir-sidebar-bg: #061018;
+  --asir-surface: #0f1a13;
+  --asir-subsurface: #0c1510;
+  --asir-advice-bg: #0a1a10;
+
+  /* Bordes */
+  --asir-border: #1a3024;
+  --asir-border-hover: #2cc56a;
+
+  /* Acento principal — verde del logo */
+  --asir-primary: #2cc56a;
+  --asir-primary-dim: rgba(44, 197, 106, 0.11);
+  --asir-primary-text: #050a07;
+
+  /* Acento secundario — índigo del logo */
+  --asir-accent: #1e1e6e;
+  --asir-accent-dim: rgba(30, 30, 110, 0.2);
+
+  /* Sombras / Glow */
+  --asir-glow: 0 0 16px rgba(44, 197, 106, 0.08);
+  --asir-glow-hover: 0 0 24px rgba(44, 197, 106, 0.2);
+  --asir-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+
+  /* Textos */
+  --asir-text: #e8f5ed;
+  --asir-text-muted: #5a8a6e;
+  --asir-text-sub: #2a4a35;
+
+  /* Sidebar */
+  --asir-sidebar-bg: #050806;
+  --asir-sidebar-item: rgba(44, 197, 106, 0.07);
+  --asir-sidebar-active: #2cc56a;
+
+  /* Misc */
+  --asir-hr: #111f17;
+  --asir-input-bg: #0c1510;
+  --asir-table-head: #060e09;
+  --asir-table-row: #0a1310;
+
+  /* Botones */
+  --asir-btn-primary: #2cc56a;
+  --asir-btn-primary-hover: #3dd97d;
+  --asir-btn-primary-text: #040805;
 }
 
+/* ── TEMA OSCURO NEUTRO — Dark con acento verde suavizado ──────────────── */
 html[data-theme="oscuro"] {
-  --asir-bg: #111113;
-  --asir-bg-gradient: linear-gradient(180deg, #111113 0%, #09090b 100%);
-  --asir-surface: #18181b;
-  --asir-subsurface: #222226;
-  --asir-advice-bg: #222226;
-  --asir-border: #323238;
-  --asir-border-hover: #52525b;
-  --asir-glow: 0 10px 25px rgba(0, 0, 0, 0.5);
-  --asir-text: #fafafa;
-  --asir-text-muted: #a1a1aa;
-  --asir-sidebar-bg: #141416;
+  --asir-bg: #090909;
+  --asir-bg-gradient: linear-gradient(180deg, #090909 0%, #060606 100%);
+  --asir-surface: #111312;
+  --asir-subsurface: #181c19;
+  --asir-advice-bg: #181c19;
+
+  --asir-border: #202820;
+  --asir-border-hover: #2cc56a;
+
+  --asir-primary: #2cc56a;
+  --asir-primary-dim: rgba(44, 197, 106, 0.09);
+  --asir-primary-text: #000000;
+
+  --asir-accent: #1e1e6e;
+  --asir-accent-dim: rgba(30, 30, 110, 0.18);
+
+  --asir-glow: 0 0 14px rgba(0, 0, 0, 0.6);
+  --asir-glow-hover: 0 0 20px rgba(44, 197, 106, 0.16);
+  --asir-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+
+  --asir-text: #f0f0f0;
+  --asir-text-muted: #5a7060;
+  --asir-text-sub: #2e3d32;
+
+  --asir-sidebar-bg: #060706;
+  --asir-sidebar-item: rgba(44, 197, 106, 0.06);
+  --asir-sidebar-active: #2cc56a;
+
+  --asir-hr: #181f1a;
+  --asir-input-bg: #0e100f;
+  --asir-table-head: #0a0c0a;
+  --asir-table-row: #0d100d;
+
+  --asir-btn-primary: #2cc56a;
+  --asir-btn-primary-hover: #3dd97d;
+  --asir-btn-primary-text: #000000;
 }
 
+/* ── TEMA CLARO — Light Brand (verde logo sobre blanco) ────────────────── */
 html[data-theme="claro"] {
-  --asir-bg: #f1f5f9;
-  --asir-bg-gradient: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  --asir-bg: #f2fbf5;
+  --asir-bg-gradient: linear-gradient(160deg, #f2fbf5 0%, #e8f7ee 100%);
   --asir-surface: #ffffff;
-  --asir-subsurface: #f8fafc;
-  --asir-advice-bg: linear-gradient(90deg, #ecfdf5 0%, #f0f9ff 100%);
-  --asir-border: #cbd5e1;
-  --asir-border-hover: #10b981;
-  --asir-glow: 0 8px 24px rgba(15, 23, 42, 0.08);
-  --asir-text: #0f172a;
-  --asir-text-muted: #475569;
-  --asir-sidebar-bg: #ffffff;
+  --asir-subsurface: #f5fdf7;
+  --asir-advice-bg: #edfaf2;
+
+  --asir-border: #c0e8cf;
+  --asir-border-hover: #1fa855;
+
+  /* Verde más oscuro para contraste sobre blanco */
+  --asir-primary: #1fa855;
+  --asir-primary-dim: rgba(31, 168, 85, 0.1);
+  --asir-primary-text: #ffffff;
+
+  --asir-accent: #1e1e6e;
+  --asir-accent-dim: rgba(30, 30, 110, 0.1);
+
+  --asir-glow: 0 2px 12px rgba(31, 168, 85, 0.08);
+  --asir-glow-hover: 0 4px 20px rgba(31, 168, 85, 0.16);
+  --asir-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+
+  --asir-text: #0d1f14;
+  --asir-text-muted: #3a6b4e;
+  --asir-text-sub: #8ab89a;
+
+  --asir-sidebar-bg: #060807;
+  --asir-sidebar-item: rgba(44, 197, 106, 0.08);
+  --asir-sidebar-active: #2cc56a;
+
+  --asir-hr: #d4eedd;
+  --asir-input-bg: #ffffff;
+  --asir-table-head: #eaf6ef;
+  --asir-table-row: #f8fdf9;
+
+  --asir-btn-primary: #1fa855;
+  --asir-btn-primary-hover: #19913f;
+  --asir-btn-primary-text: #ffffff;
+}
+
+/* ── BASE ────────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
@@ -67,14 +164,15 @@ body {
   background-image: var(--asir-bg-gradient) !important;
   color: var(--asir-text) !important;
   transition:
-    background-color 0.25s ease,
-    color 0.25s ease;
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
+/* ── CARDS / SUPERFICIES ─────────────────────────────────────────────────── */
 .asir-glass {
   background: var(--asir-surface) !important;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--asir-border) !important;
+  box-shadow: var(--asir-shadow) !important;
 }
 
 .asir-subcard {
@@ -90,20 +188,36 @@ body {
 .asir-neon-card,
 .asir-cyan-card {
   border: 1px solid var(--asir-border) !important;
-  transition: all 0.25s ease;
+  box-shadow: var(--asir-glow) !important;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .asir-neon-card:hover,
 .asir-cyan-card:hover {
   border-color: var(--asir-border-hover) !important;
-  box-shadow: var(--asir-glow) !important;
+  box-shadow: var(--asir-glow-hover) !important;
 }
 
-/* Overrides Modo Oscuro */
-html[data-theme="oscuro"] aside,
-html[data-theme="oscuro"] #sidebar-container aside {
-  background-color: var(--asir-sidebar-bg) !important;
-  border-color: #27272a !important;
+/* ── OVERRIDES TAILWIND → DARK (predeterminado + oscuro) ────────────────── */
+html[data-theme="predeterminado"] .bg-slate-900,
+html[data-theme="predeterminado"] .bg-slate-950,
+html[data-theme="predeterminado"] .bg-slate-950\/50,
+html[data-theme="predeterminado"] .bg-slate-950\/55,
+html[data-theme="predeterminado"] .bg-slate-950\/75,
+html[data-theme="predeterminado"] .bg-slate-900\/80,
+html[data-theme="predeterminado"] .bg-slate-900\/90,
+html[data-theme="predeterminado"] .bg-\[\#091520\] {
+  background-color: var(--asir-table-head) !important;
+}
+
+html[data-theme="predeterminado"] .bg-slate-800,
+html[data-theme="predeterminado"] .bg-slate-800\/90,
+html[data-theme="predeterminado"] .bg-slate-800\/95,
+html[data-theme="predeterminado"] .bg-slate-800\/80 {
+  background-color: var(--asir-surface) !important;
+  border-color: var(--asir-border) !important;
 }
 
 html[data-theme="oscuro"] .bg-slate-900,
@@ -114,33 +228,137 @@ html[data-theme="oscuro"] .bg-slate-950\/75,
 html[data-theme="oscuro"] .bg-slate-900\/80,
 html[data-theme="oscuro"] .bg-slate-900\/90,
 html[data-theme="oscuro"] .bg-\[\#091520\] {
-  background-color: #1c1c1f !important;
-  border-color: #323238 !important;
+  background-color: var(--asir-table-head) !important;
 }
 
 html[data-theme="oscuro"] .bg-slate-800,
 html[data-theme="oscuro"] .bg-slate-800\/90,
-html[data-theme="oscuro"] .bg-slate-800\/95 {
-  background-color: #18181b !important;
-  border-color: #2e2e34 !important;
+html[data-theme="oscuro"] .bg-slate-800\/95,
+html[data-theme="oscuro"] .bg-slate-800\/80 {
+  background-color: var(--asir-surface) !important;
+  border-color: var(--asir-border) !important;
 }
 
-/* Overrides Modo Claro */
+/* Bordes dark */
+html[data-theme="predeterminado"] .border-slate-700,
+html[data-theme="predeterminado"] .border-slate-800,
+html[data-theme="predeterminado"] .border-slate-700\/80,
+html[data-theme="predeterminado"] .divide-slate-700,
+html[data-theme="predeterminado"] .divide-slate-700\/80 {
+  border-color: var(--asir-border) !important;
+}
+
+html[data-theme="oscuro"] .border-slate-700,
+html[data-theme="oscuro"] .border-slate-800,
+html[data-theme="oscuro"] .border-slate-700\/80,
+html[data-theme="oscuro"] .divide-slate-700,
+html[data-theme="oscuro"] .divide-slate-700\/80 {
+  border-color: var(--asir-border) !important;
+}
+
+/* Sidebar dark */
+html[data-theme="predeterminado"] aside,
+html[data-theme="predeterminado"] #sidebar-container aside,
+html[data-theme="oscuro"] aside,
+html[data-theme="oscuro"] #sidebar-container aside {
+  background-color: var(--asir-sidebar-bg) !important;
+  border-color: var(--asir-border) !important;
+}
+
+/* Textos dark */
+html[data-theme="predeterminado"] .text-slate-100,
+html[data-theme="predeterminado"] .text-slate-200,
+html[data-theme="predeterminado"] .text-white {
+  color: var(--asir-text) !important;
+}
+
+html[data-theme="predeterminado"] .text-slate-300,
+html[data-theme="predeterminado"] .text-slate-400 {
+  color: var(--asir-text-muted) !important;
+}
+
+html[data-theme="oscuro"] .text-slate-100,
+html[data-theme="oscuro"] .text-slate-200,
+html[data-theme="oscuro"] .text-white {
+  color: var(--asir-text) !important;
+}
+
+html[data-theme="oscuro"] .text-slate-300,
+html[data-theme="oscuro"] .text-slate-400 {
+  color: var(--asir-text-muted) !important;
+}
+
+/* Acento sky/cyan → verde ASIR en dark */
+html[data-theme="predeterminado"] .text-sky-400,
+html[data-theme="predeterminado"] .text-cyan-400,
+html[data-theme="predeterminado"] .text-cyan-300,
+html[data-theme="predeterminado"] .text-emerald-400,
+html[data-theme="predeterminado"] .text-emerald-300 {
+  color: var(--asir-primary) !important;
+}
+
+html[data-theme="oscuro"] .text-sky-400,
+html[data-theme="oscuro"] .text-cyan-400,
+html[data-theme="oscuro"] .text-cyan-300,
+html[data-theme="oscuro"] .text-emerald-400,
+html[data-theme="oscuro"] .text-emerald-300 {
+  color: var(--asir-primary) !important;
+}
+
+/* inputs dark */
+html[data-theme="predeterminado"] input,
+html[data-theme="predeterminado"] select,
+html[data-theme="predeterminado"] textarea,
+html[data-theme="oscuro"] input,
+html[data-theme="oscuro"] select,
+html[data-theme="oscuro"] textarea {
+  background-color: var(--asir-input-bg) !important;
+  color: var(--asir-text) !important;
+  border-color: var(--asir-border) !important;
+}
+
+/* ── OVERRIDES TAILWIND → CLARO ──────────────────────────────────────────── */
 html[data-theme="claro"] aside,
 html[data-theme="claro"] #sidebar-container aside {
   background-color: var(--asir-sidebar-bg) !important;
-  border-color: #cbd5e1 !important;
-  color: #0f172a !important;
+  border-color: #15221b !important;
+}
+
+html[data-theme="claro"] #sidebar-container aside * {
+  border-color: #15221b;
+}
+
+html[data-theme="claro"] #sidebar-container .asir-nav-item {
+  color: #8da497 !important;
+}
+
+html[data-theme="claro"] #sidebar-container .asir-nav-item:hover {
+  color: #e8f5ed !important;
+  background-color: rgba(44, 197, 106, 0.08) !important;
+}
+
+html[data-theme="claro"] #sidebar-container .asir-nav-active {
+  color: #2cc56a !important;
+  background-color: rgba(44, 197, 106, 0.12) !important;
+  border-color: rgba(44, 197, 106, 0.3) !important;
+}
+
+html[data-theme="claro"] #sidebar-container .asir-user-name {
+  color: #e8f5ed !important;
+}
+
+html[data-theme="claro"] #sidebar-container .asir-user-email {
+  color: #5a7566 !important;
 }
 
 html[data-theme="claro"] #asirThemeSwitcherBox {
-  background-color: #f1f5f9 !important;
-  border-color: #cbd5e1 !important;
+  background: transparent !important;
+  border: none !important;
 }
 
-html[data-theme="claro"] #asirThemeSwitcherBox > div:last-child {
-  background-color: #e2e8f0 !important;
-  border-color: #cbd5e1 !important;
+html[data-theme="claro"] #asirThemeSwitcherBox {
+  background: transparent !important;
+  border: none !important;
 }
 
 html[data-theme="claro"] .bg-slate-900,
@@ -151,46 +369,168 @@ html[data-theme="claro"] .bg-slate-950\/75,
 html[data-theme="claro"] .bg-slate-900\/80,
 html[data-theme="claro"] .bg-slate-900\/90,
 html[data-theme="claro"] .bg-\[\#091520\] {
-  background-color: #f8fafc !important;
-  color: #0f172a !important;
+  background-color: var(--asir-table-head) !important;
+  color: var(--asir-text) !important;
 }
 
 html[data-theme="claro"] .bg-slate-800,
 html[data-theme="claro"] .bg-slate-800\/90,
+html[data-theme="claro"] .bg-slate-800\/80,
 html[data-theme="claro"] .bg-slate-800\/95 {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  border-color: #cbd5e1 !important;
+  background-color: var(--asir-surface) !important;
+  color: var(--asir-text) !important;
+  border-color: var(--asir-border) !important;
 }
 
 html[data-theme="claro"] .text-white,
 html[data-theme="claro"] .text-slate-100,
 html[data-theme="claro"] .text-slate-200 {
-  color: #0f172a !important;
+  color: var(--asir-text) !important;
 }
 
 html[data-theme="claro"] .text-slate-300,
 html[data-theme="claro"] .text-slate-400 {
-  color: #475569 !important;
+  color: var(--asir-text-muted) !important;
 }
 
+html[data-theme="claro"] .text-slate-500 {
+  color: var(--asir-text-sub) !important;
+}
+
+/* Acento sky/cyan/emerald → verde ASIR en claro */
+html[data-theme="claro"] .text-sky-400,
+html[data-theme="claro"] .text-sky-300,
+html[data-theme="claro"] .text-cyan-400,
+html[data-theme="claro"] .text-cyan-300,
+html[data-theme="claro"] .text-emerald-400,
 html[data-theme="claro"] .text-emerald-300 {
-  color: #047857 !important;
-}
-
-html[data-theme="claro"] .text-cyan-300 {
-  color: #0369a1 !important;
+  color: var(--asir-primary) !important;
 }
 
 html[data-theme="claro"] .border-slate-700,
-html[data-theme="claro"] .border-slate-800 {
-  border-color: #cbd5e1 !important;
+html[data-theme="claro"] .border-slate-800,
+html[data-theme="claro"] .border-slate-700\/80,
+html[data-theme="claro"] .divide-slate-700,
+html[data-theme="claro"] .divide-slate-700\/80 {
+  border-color: var(--asir-border) !important;
 }
 
 html[data-theme="claro"] input,
 html[data-theme="claro"] select,
 html[data-theme="claro"] textarea {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  border-color: #94a3b8 !important;
+  background-color: var(--asir-input-bg) !important;
+  color: var(--asir-text) !important;
+  border-color: var(--asir-border) !important;
+}
+
+html[data-theme="claro"] input::placeholder,
+html[data-theme="claro"] textarea::placeholder {
+  color: var(--asir-text-sub) !important;
+}
+
+html[data-theme="claro"] .bg-emerald-500,
+html[data-theme="claro"] .bg-emerald-600,
+html[data-theme="claro"] .bg-sky-600 {
+  background-color: var(--asir-btn-primary) !important;
+  color: var(--asir-btn-primary-text) !important;
+}
+
+html[data-theme="claro"] .hover\:bg-emerald-500:hover,
+html[data-theme="claro"] .hover\:bg-emerald-400:hover,
+html[data-theme="claro"] .hover\:bg-sky-500:hover {
+  background-color: var(--asir-btn-primary-hover) !important;
+}
+
+/* ── HR ──────────────────────────────────────────────────────────────────── */
+.border-slate-800 {
+  border-color: var(--asir-hr) !important;
+}
+
+/* ── ACENTO GLOBAL HEREDADO ──────────────────────────────────────────────── */
+.text-sky-400,
+.text-cyan-400 {
+  color: var(--asir-primary) !important;
+}
+
+/* ── BOTÓN PRIMARIO ──────────────────────────────────────────────────────── */
+.asir-btn-primary {
+  background-color: var(--asir-btn-primary) !important;
+  color: var(--asir-btn-primary-text) !important;
+  border: none;
+  font-weight: 700;
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.asir-btn-primary:hover {
+  background-color: var(--asir-btn-primary-hover) !important;
+  box-shadow: 0 0 16px rgba(44, 197, 106, 0.28) !important;
+}
+
+/* ── THEME SWITCHER ──────────────────────────────────────────────────────── */
+#asirThemeSwitcherBox {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* ── SCROLLBAR ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--asir-border);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--asir-primary);
+}
+
+/* ── FOCUS RING ──────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--asir-primary);
+  outline-offset: 2px;
+}
+
+/* ── PRESERVACIÓN DE COMPONENTES MEDIA/CARRUSEL OVERLAYS ────────────────── */
+/* El carrusel de noticias tiene una foto de fondo con texto superpuesto:
+   el texto sobre la foto SIEMPRE debe ser blanco y los botones/flechas legibles,
+   sin importar si el tema está en claro u oscuro */
+
+#contenedorCarrusel .text-white,
+#contenedorCarrusel h3,
+#slidesCarrusel h3,
+#slidesCarrusel .text-white {
+  color: #ffffff !important;
+}
+
+#contenedorCarrusel .text-slate-300,
+#contenedorCarrusel .text-slate-200,
+#slidesCarrusel .text-slate-300,
+#slidesCarrusel .text-slate-200 {
+  color: #e2e8f0 !important;
+}
+
+#contenedorCarrusel .bg-gradient-to-t,
+#slidesCarrusel .bg-gradient-to-t {
+  background-image: linear-gradient(
+    to top,
+    rgba(5, 8, 6, 0.95),
+    rgba(5, 8, 6, 0.6) 50%,
+    rgba(5, 8, 6, 0.15)
+  ) !important;
+}
+
+#contenedorCarrusel button,
+#contenedorCarrusel .bg-slate-950\/75 {
+  background-color: rgba(5, 8, 6, 0.75) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+#contenedorCarrusel button:hover {
+  background-color: rgba(5, 8, 6, 0.95) !important;
 }

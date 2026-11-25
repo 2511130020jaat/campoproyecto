@@ -1,4 +1,4 @@
-let parcelasClima = [];
+﻿let parcelasClima = [];
 let gruposCampos = [];
 let campoGeneralActivo = null;
 let objetoClimaActivo = null;
@@ -192,7 +192,7 @@ function colocarPinExplorado(lat, lon, nombreOrigen) {
         radius: 9,
         color: "#22d3ee",
         weight: 3,
-        fillColor: "#06b6d4",
+        fillColor: "#00E5FF",
         fillOpacity: 0.45,
       }).addTo(mapaClima);
     } else {
@@ -252,13 +252,13 @@ function dibujarCamposYParcelasEnMapa(parcelaResaltadaId = null) {
       const esSeleccionada =
         parcelaResaltadaId && String(p.id) === String(parcelaResaltadaId);
 
-      let colorBorde = "#10b981";
+      let colorBorde = "#00E5FF";
       let motivoTxt = "Óptimo";
       if (p.estado === "CRITICO") {
         colorBorde = "#f43f5e";
         motivoTxt = `Déficit (<${p.umbral_humedad}%)`;
       } else if (p.estado === "ATENCION") {
-        colorBorde = "#38bdf8";
+        colorBorde = "#00b4cc";
         motivoTxt = "Atención";
       }
       if (esSeleccionada) colorBorde = "#22d3ee";
@@ -320,10 +320,10 @@ function dibujarCamposYParcelasEnMapa(parcelaResaltadaId = null) {
     if (puntosCampo.length >= 2) {
       const boundsCampo = L.latLngBounds(puntosCampo).pad(0.18);
       L.rectangle(boundsCampo, {
-        color: "#34d399",
+        color: "#00E5FF",
         weight: 1.5,
         dashArray: "6, 6",
-        fillColor: "#10b981",
+        fillColor: "#00E5FF",
         fillOpacity: 0.03,
         interactive: false,
       })
@@ -891,8 +891,8 @@ function abrirModalCurvas() {
     if (chartTemp) chartTemp.destroy();
     const ctxT = canvasTemp.getContext("2d");
     const grad = ctxT.createLinearGradient(0, 0, 0, 200);
-    grad.addColorStop(0, "rgba(16, 185, 129, 0.35)");
-    grad.addColorStop(1, "rgba(16, 185, 129, 0.0)");
+    grad.addColorStop(0, "rgba(0, 229, 255, 0.18)");
+    grad.addColorStop(1, "rgba(0, 229, 255, 0.0)");
 
     chartTemp = new Chart(ctxT, {
       type: "line",
@@ -902,12 +902,12 @@ function abrirModalCurvas() {
           {
             label: "Temperatura (°C)",
             data: temps,
-            borderColor: "#10b981",
+            borderColor: "#00E5FF",
             backgroundColor: grad,
             fill: true,
             tension: 0.35,
             pointRadius: 3,
-            pointBackgroundColor: "#34d399",
+            pointBackgroundColor: "#00E5FF",
           },
         ],
       },
@@ -917,11 +917,11 @@ function abrirModalCurvas() {
         plugins: { legend: { display: false } },
         scales: {
           x: {
-            ticks: { color: "#94a3b8", maxRotation: 0, maxTicksLimit: 8 },
+            ticks: { color: "#4a6878", maxRotation: 0, maxTicksLimit: 8 },
             grid: { color: "rgba(148, 163, 184, 0.15)" },
           },
           y: {
-            ticks: { color: "#10b981", callback: (v) => v + "°C" },
+            ticks: { color: "#00E5FF", callback: (v) => v + "°C" },
             grid: { color: "rgba(148, 163, 184, 0.15)" },
           },
         },
@@ -941,8 +941,8 @@ function abrirModalCurvas() {
             type: "bar",
             label: "Lluvia (%)",
             data: probs,
-            backgroundColor: "rgba(6, 182, 212, 0.65)",
-            borderColor: "#06b6d4",
+            backgroundColor: "rgba(0, 229, 255, 0.55)",
+            borderColor: "#00E5FF",
             borderWidth: 1,
             borderRadius: 4,
           },
@@ -950,7 +950,7 @@ function abrirModalCurvas() {
             type: "line",
             label: "Nubosidad (%)",
             data: nubes,
-            borderColor: "#94a3b8",
+            borderColor: "#4a6878",
             borderWidth: 1.5,
             borderDash: [4, 4],
             tension: 0.35,
@@ -965,13 +965,13 @@ function abrirModalCurvas() {
         plugins: { legend: { display: false } },
         scales: {
           x: {
-            ticks: { color: "#94a3b8", maxRotation: 0, maxTicksLimit: 8 },
+            ticks: { color: "#4a6878", maxRotation: 0, maxTicksLimit: 8 },
             grid: { color: "rgba(148, 163, 184, 0.15)" },
           },
           y: {
             min: 0,
             max: 100,
-            ticks: { color: "#06b6d4", stepSize: 25, callback: (v) => v + "%" },
+            ticks: { color: "#00E5FF", stepSize: 25, callback: (v) => v + "%" },
             grid: { color: "rgba(148, 163, 184, 0.15)" },
           },
         },
