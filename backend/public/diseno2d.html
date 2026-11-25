@@ -567,6 +567,145 @@
           </div>
         </div>
       </section>
+      <section
+        id="bloqueAsirIo"
+        class="bg-slate-800 border border-slate-700 rounded-2xl p-4 md:p-5 shadow-xl"
+      >
+        <div
+          class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-700"
+        >
+          <div>
+            <div class="flex items-center gap-2">
+              <span
+                class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400"
+              ></span>
+              <h3
+                class="text-sm font-bold uppercase tracking-wider text-emerald-400"
+              >
+                ASIR IO
+              </h3>
+            </div>
+            <p id="asirIoEstadoUsuario" class="text-xs text-slate-400 mt-1">
+              Verificando sesión de usuario...
+            </p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              id="btnRefrescarPlanosIo"
+              class="px-3 py-2 text-xs font-semibold rounded-xl bg-slate-900 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+            >
+              Actualizar planos
+            </button>
+            <a
+              id="enlaceAbrirAsirIo"
+              href="http://localhost:5173"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-lg"
+            >
+              Abrir ASIR IO
+            </a>
+          </div>
+        </div>
+
+        <div
+          id="listaPlanosAsirIo"
+          class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs text-slate-300"
+        >
+          <p class="text-slate-400">Cargando planos del usuario...</p>
+        </div>
+      </section>
+
+      <script>
+        (() => {
+          const ASIR_IO_WEB_URL = "http://localhost:5173";
+          const ASIR_IO_API_URL = "http://localhost:5000";
+
+          const estadoEl = document.getElementById("asirIoEstadoUsuario");
+          const listaEl = document.getElementById("listaPlanosAsirIo");
+          const enlaceEl = document.getElementById("enlaceAbrirAsirIo");
+          const btnRefrescar = document.getElementById("btnRefrescarPlanosIo");
+
+          function obtenerUsuarioAsir() {
+            try {
+              const raw = localStorage.getItem("usuario_asir");
+              return raw ? JSON.parse(raw) : null;
+            } catch {
+              return null;
+            }
+          }
+
+          async function cargarPlanosAsirIo() {
+            const usuario = obtenerUsuarioAsir();
+            enlaceEl.href = ASIR_IO_WEB_URL;
+
+            if (!usuario || !usuario.id) {
+              estadoEl.textContent =
+                "Sin sesión activa en ASIR — inicia sesión para ver tus planos de ASIR IO.";
+              listaEl.innerHTML = `<p class="text-slate-400 col-span-full">Inicia sesión con tu cuenta en ASIR para consultar tus esquemas guardados.</p>`;
+              return;
+            }
+
+            const nombreMostrar =
+              usuario.nombre ||
+              usuario.correo ||
+              usuario.email ||
+              `ID ${usuario.id}`;
+            estadoEl.textContent = `Cuenta vinculada: ${nombreMostrar} (ID: ${usuario.id})`;
+
+            try {
+              const url = `${ASIR_IO_API_URL}/api/esquemas?id_usuario=${encodeURIComponent(usuario.id)}`;
+              const resp = await fetch(url);
+              const data = await resp.json();
+
+              if (!resp.ok || !data.ok) {
+                listaEl.innerHTML = `<p class="text-rose-400 col-span-full">No se pudieron cargar los planos de ASIR IO.</p>`;
+                return;
+              }
+
+              const esquemas = Array.isArray(data.esquemas)
+                ? data.esquemas
+                : [];
+              if (esquemas.length === 0) {
+                listaEl.innerHTML = `<p class="text-slate-400 col-span-full">Aún no tienes planos guardados en ASIR IO con esta cuenta.</p>`;
+                return;
+              }
+
+              listaEl.innerHTML = esquemas
+                .map((plano) => {
+                  const fechaTexto = plano.fecha
+                    ? new Date(plano.fecha).toLocaleDateString("es-PE")
+                    : "Sin fecha";
+                  const nombreSeguro = String(plano.nombre || plano.id)
+                    .replace(/</g, "<")
+                    .replace(/>/g, ">");
+                  const idSeguro = encodeURIComponent(plano.id);
+
+                  return `
+                    <a
+                      href="${ASIR_IO_WEB_URL}/?plano=${idSeguro}"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="block p-3 rounded-xl bg-slate-900 hover:bg-slate-950 border border-slate-700 hover:border-emerald-500/60 transition"
+                    >
+                      <div class="font-semibold text-white truncate">${nombreSeguro}</div>
+                      <div class="text-[11px] text-slate-400 mt-1">Guardado: ${fechaTexto}</div>
+                    </a>
+                  `;
+                })
+                .join("");
+            } catch {
+              listaEl.innerHTML = `<p class="text-amber-400 col-span-full">No se pudo conectar con el servidor de ASIR IO (puerto 5000).</p>`;
+            }
+          }
+
+          btnRefrescar?.addEventListener("click", cargarPlanosAsirIo);
+          document.addEventListener("DOMContentLoaded", cargarPlanosAsirIo);
+          cargarPlanosAsirIo();
+        })();
+      </script>
     </main>
   </body>
 </html>

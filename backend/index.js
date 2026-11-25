@@ -113,6 +113,80 @@ app.post("/api/auth/login", (req, res) => {
   });
 });
 
+////
+app.post("/api/auth/google", async (req, res) => {
+  const { credential } = req.body;
+
+  if (!credential) {
+    return res.status(400).json({ error: "Token de Google no recibido." });
+  }
+
+  try {
+    const urlTokenInfo = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`;
+    const raw = await obtenerTextoHttps(urlTokenInfo);
+    const info = JSON.parse(raw);
+
+    if (!info.email || info.email_verified !== "true") {
+      return res
+        .status(401)
+        .json({ error: "No se pudo verificar el correo de Google." });
+    }
+
+    const correo = info.email.trim();
+    const nombre = (info.name || correo.split("@")[0]).trim();
+
+    db.query(
+      "SELECT id, nombre, correo, rol FROM usuarios WHERE correo = ? LIMIT 1",
+      [correo],
+      (err, resultados) => {
+        if (err) {
+          console.error("❌ Error consultando usuario Google:", err);
+          return res
+            .status(500)
+            .json({ error: "Error interno al verificar usuario." });
+        }
+
+        if (resultados.length > 0) {
+          return res.json({
+            mensaje: "Inicio de sesión con Google exitoso",
+            usuario: resultados[0],
+          });
+        }
+
+        const queryInsert =
+          "INSERT INTO usuarios (nombre, correo, clave_hash, rol) VALUES (?, ?, ?, ?)";
+        db.query(
+          queryInsert,
+          [nombre, correo, "GOOGLE_OAUTH", "CLIENTE"],
+          (errIns, resultIns) => {
+            if (errIns) {
+              console.error("❌ Error creando usuario Google:", errIns);
+              return res
+                .status(500)
+                .json({ error: "Error al registrar cuenta de Google." });
+            }
+
+            return res.status(201).json({
+              mensaje: "Cuenta creada con Google",
+              usuario: {
+                id: resultIns.insertId,
+                nombre,
+                correo,
+                rol: "CLIENTE",
+              },
+            });
+          },
+        );
+      },
+    );
+  } catch (e) {
+    console.error("❌ Error validando token de Google:", e.message);
+    return res
+      .status(401)
+      .json({ error: "Token de Google inválido o expirado." });
+  }
+});
+
 // ==========================================
 // GESTIÓN DE PARCELAS Y CONFIGURACIÓN
 // ==========================================
