@@ -1,3 +1,158 @@
+﻿
+function inicializarMapaRiego() {
+  const cont = document.getElementById("mapaRiegoSector");
+  if (!cont || mapaRiego) return;
+
+  mapaRiego = L.map("mapaRiegoSector", {
+    zoomControl: true,
+    attributionControl: false
+  }).setView([-12.046374, -77.042793], 15);
+
+  L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+    maxZoom: 21,
+    subdomains: ["mt0", "mt1", "mt2", "mt3"]
+  }).addTo(mapaRiego);
+
+  capaPoligonoRiego = L.layerGroup().addTo(mapaRiego);
+}
+
+function actualizarMapaRiegoSector(parcela) {
+  if (!mapaRiego) {
+    inicializarMapaRiego();
+  }
+  if (!mapaRiego) return;
+
+  capaPoligonoRiego.clearLayers();
+  let bounds = null;
+
+  if (parcela && parcela.poligono_json) {
+    try {
+      const geo = typeof parcela.poligono_json === "string" ? JSON.parse(parcela.poligono_json) : parcela.poligono_json;
+      if (Array.isArray(geo) && geo.length >= 3) {
+        const poly = L.polygon(geo, {
+          color: "#2CC56A",
+          weight: 2.5,
+          fillColor: "#2CC56A",
+          fillOpacity: 0.22
+        }).addTo(capaPoligonoRiego);
+
+        bounds = poly.getBounds();
+        mapaRiego.fitBounds(bounds, { padding: [20, 20], maxZoom: 18 });
+      }
+    } catch(e) {}
+  }
+
+  if (!bounds && parcela && parcela.latitud && parcela.longitud) {
+    const lat = parseFloat(parcela.latitud);
+    const lng = parseFloat(parcela.longitud);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      mapaRiego.setView([lat, lng], 17);
+      L.marker([lat, lng]).addTo(capaPoligonoRiego);
+    }
+  }
+
+  const lblMeta = document.getElementById("lblMetaMapaRiego");
+  if (lblMeta && parcela) {
+    lblMeta.innerText = `#${parcela.id} • ${parcela.parcela || parcela.nombre}`;
+  }
+
+  setTimeout(() => {
+    if (mapaRiego) mapaRiego.invalidateSize();
+  }, 200);
+}
+
+function seleccionarCampoRiegoActivo(idCampo) {
+  if (!idCampo) return;
+  campoActivoRiegoId = idCampo;
+
+  const selFiltro = document.getElementById("selCampoFiltroRiego");
+  if (selFiltro) selFiltro.value = String(idCampo);
+
+  const selModal = document.getElementById("selParcelaRiego");
+  if (selModal) selModal.value = String(idCampo);
+
+  // Renderizar la tarjeta del campo seleccionado
+  const parcela = parcelasRiego.find((p) => String(p.id) === String(idCampo)) || parcelasRiego[0];
+  if (parcela) {
+    renderizarTarjetaSectorActivo(parcela);
+    actualizarMapaRiegoSector(parcela);
+  }
+}
+
+function renderizarTarjetaSectorActivo(p) {
+  const grid = document.getElementById("gridSectoresRiego");
+  if (!grid) return;
+
+  const nombre = p.parcela || p.nombre || "Parcela #" + p.id;
+  const campoGeneral = p.campo_general ? `${p.campo_general} • ` : "";
+  const cultivo = p.cultivo || "General";
+  const mac = p.codigo_mac || "Sin sensor";
+  const modo = p.modo_riego || "AUTO";
+  const umbral = p.umbral_humedad !== null ? parseFloat(p.umbral_humedad) : 35;
+  const p6 = pronosticosRiego[p.id];
+
+  let badgeEstado = "";
+  let bordeCard = "border-slate-700";
+
+  if (modo === "MANUAL_ON") {
+    badgeEstado = '<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-bold animate-pulse">💧 REGANDO AHORA</span>';
+    bordeCard = "border-emerald-500/50";
+  } else if (modo === "MANUAL_OFF") {
+    badgeEstado = '<span class="bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-bold">🛑 APAGADO</span>';
+    bordeCard = "border-rose-500/40";
+  } else {
+    badgeEstado = '<span class="bg-sky-500/20 text-sky-400 border border-sky-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-bold">🤖 INTELIGENTE</span>';
+  }
+
+  const avisoClima = p6 && p6.lluviaInminente
+    ? `<div class="bg-sky-500/10 border border-sky-500/30 text-sky-300 text-[11px] px-3 py-1.5 rounded-lg font-medium">🌦️ Lluvia prevista (${p6.maxProb6h}% en ${p6.horasHastaLluvia}h): el modo Inteligente pospondrá el riego.</div>`
+    : "";
+
+  const clsAuto = modo === "AUTO" ? "bg-sky-600 text-white shadow" : "text-slate-400 hover:text-white";
+  const clsOn = modo === "MANUAL_ON" ? "bg-emerald-600 text-white shadow" : "text-slate-400 hover:text-white";
+  const clsOff = modo === "MANUAL_OFF" ? "bg-rose-600 text-white shadow" : "text-slate-400 hover:text-white";
+
+  grid.innerHTML = `
+    <div class="bg-slate-900/90 p-5 rounded-xl border ${bordeCard} shadow-sm space-y-4">
+      <div class="flex items-start justify-between gap-2 border-b border-slate-800 pb-3">
+        <div>
+          <span class="text-xs font-mono text-sky-400 font-bold">${campoGeneral}Campo #${p.id}</span>
+          <h4 class="text-base font-bold text-slate-100">${nombre}</h4>
+          <p class="text-xs text-slate-400">🌱 Cultivo: ${cultivo} • MAC: ${mac}</p>
+        </div>
+        ${badgeEstado}
+      </div>
+
+      ${avisoClima}
+
+      <!-- Selector de Modo de 3 Estados -->
+      <div>
+        <label class="block text-[11px] font-semibold text-slate-400 mb-2 uppercase">Modo de Operación</label>
+        <div class="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-700 text-xs text-center font-bold">
+          <button type="button" onclick="cambiarModoRiego(${p.id}, 'AUTO')" class="py-2 rounded-lg transition ${clsAuto}">🤖 Inteligente</button>
+          <button type="button" onclick="cambiarModoRiego(${p.id}, 'MANUAL_ON')" class="py-2 rounded-lg transition ${clsOn}">💧 Manual ON</button>
+          <button type="button" onclick="cambiarModoRiego(${p.id}, 'MANUAL_OFF')" class="py-2 rounded-lg transition ${clsOff}">🛑 Apagado</button>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-2">${descripcionModoCampo(modo, umbral)}</p>
+      </div>
+
+      <!-- Umbral de Humedad -->
+      <div class="border-t border-slate-800 pt-3">
+        <div class="flex justify-between items-center text-xs mb-1">
+          <span class="text-slate-300 font-semibold">Umbral Mínimo Deseado:</span>
+          <span class="font-mono text-sky-400 font-black">${umbral}%</span>
+        </div>
+        <div class="flex gap-2">
+          <input type="number" id="inpUmbral_${p.id}" value="${umbral}" min="10" max="80" class="w-24 bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 font-mono focus:outline-none focus:border-sky-500" />
+          <button type="button" onclick="guardarUmbralHumedad(${p.id})" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold px-3 py-1 rounded-lg transition">Guardar Umbral</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+let campoActivoRiegoId = null;
+let mapaRiego = null;
+let capaPoligonoRiego = null;
 let parcelasRiego = [];
 let pronosticosRiego = {};
 let programacionesCache = [];
@@ -86,129 +241,23 @@ async function cargarSectoresRiego() {
       enAuto +
       " en modo Inteligente";
 
-    grid.innerHTML = "";
+        const selFiltro = document.getElementById("selCampoFiltroRiego");
+    if (selFiltro) {
+      selFiltro.innerHTML = parcelasRiego.map(p => {
+        const nom = p.parcela || p.nombre || "Parcela #" + p.id;
+        const cg = p.campo_general ? `${p.campo_general} • ` : "";
+        return `<option value="${p.id}">${cg}#${p.id} - ${nom} (${p.cultivo || "General"})</option>`;
+      }).join("");
 
-    parcelasRiego.forEach((p) => {
-      const nombre = p.parcela || p.nombre || "Parcela #" + p.id;
-      const campoGeneral = p.campo_general ? `${p.campo_general} • ` : "";
-      const cultivo = p.cultivo || "General";
-      const mac = p.codigo_mac || "Sin sensor";
-      const modo = p.modo_riego || "AUTO";
-      const umbral =
-        p.umbral_humedad !== null ? parseFloat(p.umbral_humedad) : 35;
-      const p6 = pronosticosRiego[p.id];
-
-      select.innerHTML +=
-        '<option value="' +
-        p.id +
-        '">' +
-        campoGeneral +
-        "#" +
-        p.id +
-        " - " +
-        nombre +
-        " (" +
-        cultivo +
-        ")</option>";
-
-      let badgeEstado = "";
-      let bordeCard = "border-slate-700";
-
-      if (modo === "MANUAL_ON") {
-        badgeEstado =
-          '<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-bold animate-pulse">💧 REGANDO AHORA</span>';
-        bordeCard = "border-emerald-500/50";
-      } else if (modo === "MANUAL_OFF") {
-        badgeEstado =
-          '<span class="bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-bold">🛑 APAGADO</span>';
-        bordeCard = "border-rose-500/40";
-      } else {
-        badgeEstado =
-          '<span class="bg-sky-500/20 text-sky-400 border border-sky-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-bold">🤖 INTELIGENTE</span>';
+      if (!campoActivoRiegoId || !parcelasRiego.some(p => String(p.id) === String(campoActivoRiegoId))) {
+        campoActivoRiegoId = parcelasRiego[0].id;
       }
+      selFiltro.value = String(campoActivoRiegoId);
+    }
 
-      const avisoClima =
-        p6 && p6.lluviaInminente
-          ? `<div class="bg-sky-500/10 border border-sky-500/30 text-sky-300 text-[11px] px-3 py-1.5 rounded-lg font-medium">🌦️ Lluvia prevista (${p6.maxProb6h}% en ${p6.horasHastaLluvia}h): el modo Inteligente pospondrá el riego.</div>`
-          : "";
-
-      const clsAuto =
-        modo === "AUTO"
-          ? "bg-sky-600 text-white shadow"
-          : "text-slate-400 hover:text-white";
-      const clsOn =
-        modo === "MANUAL_ON"
-          ? "bg-emerald-600 text-white shadow"
-          : "text-slate-400 hover:text-white";
-      const clsOff =
-        modo === "MANUAL_OFF"
-          ? "bg-rose-600 text-white shadow"
-          : "text-slate-400 hover:text-white";
-
-      grid.innerHTML +=
-        '<div class="bg-slate-800 p-5 rounded-2xl border ' +
-        bordeCard +
-        ' shadow-lg flex flex-col justify-between space-y-4">' +
-        '<div class="flex items-start justify-between gap-2">' +
-        "<div>" +
-        '<span class="text-xs font-mono text-sky-400 font-bold">' +
-        (p.campo_general ? `🏡 ${p.campo_general} • ` : "") +
-        "Campo #" +
-        p.id +
-        "</span>" +
-        '<h4 class="text-base font-bold text-slate-100">' +
-        nombre +
-        "</h4>" +
-        '<p class="text-xs text-slate-400">🌱 ' +
-        cultivo +
-        ' • 📡 <span class="font-mono text-amber-400">' +
-        mac +
-        "</span></p>" +
-        "</div>" +
-        badgeEstado +
-        "</div>" +
-        avisoClima +
-        '<div class="bg-slate-900/80 p-3 rounded-xl border border-slate-700/80 space-y-1.5">' +
-        '<div class="flex items-center justify-between gap-2">' +
-        '<span class="text-xs font-semibold text-slate-300">Humedad mínima deseada:</span>' +
-        '<div class="flex items-center gap-1.5">' +
-        '<input type="number" id="umbralSector_' +
-        p.id +
-        '" value="' +
-        umbral +
-        '" min="5" max="90" class="w-16 bg-slate-800 border border-slate-600 text-amber-400 font-bold text-center text-xs rounded-lg py-1 px-1.5 focus:outline-none focus:border-sky-500" />' +
-        '<span class="text-xs text-slate-500 font-bold">%</span>' +
-        '<button onclick="actualizarUmbralSector(' +
-        p.id +
-        ')" class="bg-slate-700 hover:bg-sky-600 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg transition">Guardar</button>' +
-        "</div>" +
-        "</div>" +
-        '<p class="text-[11px] text-slate-500">Guía: 30%–40% recomendado para hortalizas y césped.</p>' +
-        "</div>" +
-        '<div class="space-y-2">' +
-        '<div class="grid grid-cols-3 gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-700 text-xs">' +
-        '<button onclick="cambiarModoSector(' +
-        p.id +
-        ", 'AUTO')\" class=\"py-2 rounded-lg font-bold transition " +
-        clsAuto +
-        '">🤖 Inteligente</button>' +
-        '<button onclick="cambiarModoSector(' +
-        p.id +
-        ", 'MANUAL_ON')\" class=\"py-2 rounded-lg font-bold transition " +
-        clsOn +
-        '">💧 Regar Ahora</button>' +
-        '<button onclick="cambiarModoSector(' +
-        p.id +
-        ", 'MANUAL_OFF')\" class=\"py-2 rounded-lg font-bold transition " +
-        clsOff +
-        '">🛑 Apagado</button>' +
-        "</div>" +
-        '<p class="text-[11px] text-slate-400 leading-relaxed px-1">' +
-        descripcionModoCampo(modo, umbral) +
-        "</p>" +
-        "</div>" +
-        "</div>";
-    });
+    if (campoActivoRiegoId) {
+      seleccionarCampoRiegoActivo(campoActivoRiegoId);
+    }
 
     if (valorPrevio) {
       select.value = valorPrevio;

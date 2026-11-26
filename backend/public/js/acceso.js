@@ -1,4 +1,4 @@
-if (localStorage.getItem("usuario_asir")) {
+﻿if (localStorage.getItem("usuario_asir")) {
   window.location.href = "/alertas.html";
 }
 
@@ -15,12 +15,12 @@ function mostrarForm(modo) {
     fReg.classList.add("hidden");
 
     tLogin.className =
-      "w-1/2 py-2 text-xs font-bold rounded-lg bg-sky-600 text-white transition";
+      "w-1/2 py-2 text-xs font-bold rounded-lg bg-[#2CC56A] text-white shadow-sm rounded-md transition";
     tLogin.style.background = "";
     tLogin.style.color = "";
 
     tReg.className =
-      "w-1/2 py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition";
+      "w-1/2 py-2 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 rounded-md transition";
     tReg.style.background = "transparent";
     tReg.style.color = "";
   } else {
@@ -28,12 +28,12 @@ function mostrarForm(modo) {
     fReg.classList.remove("hidden");
 
     tReg.className =
-      "w-1/2 py-2 text-xs font-bold rounded-lg bg-emerald-600 text-white transition";
+      "w-1/2 py-2 text-xs font-bold rounded-lg bg-[#2CC56A] text-white shadow-sm rounded-md transition";
     tReg.style.background = "";
     tReg.style.color = "";
 
     tLogin.className =
-      "w-1/2 py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition";
+      "w-1/2 py-2 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 rounded-md transition";
     tLogin.style.background = "transparent";
     tLogin.style.color = "";
   }

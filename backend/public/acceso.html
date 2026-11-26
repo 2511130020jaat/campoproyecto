@@ -5,52 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ASIR - Acceso a la Plataforma</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="/css/asir-theme.css" />
-    <script src="/js/theme.js"></script>
   </head>
-  <body class="font-sans min-h-screen flex items-center justify-center p-4">
+  <body class="font-sans min-h-screen flex items-center justify-center p-4 bg-slate-50 text-slate-800">
     <div
-      class="w-full max-w-md rounded-2xl p-6 sm:p-8 shadow-2xl"
-      style="
-        background: var(--asir-surface, #0d1520);
-        border: 1px solid var(--asir-border, #1a2d3a);
-      "
-    >
+      class="w-full max-w-md bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-sm">
       <div class="text-center mb-6">
         <img
           src="/img/logo-asir.png"
           alt="Logo ASIR"
           class="w-[150px] h-[150px] mx-auto rounded-lg object-contain shrink-0"
         />
-        <h1 class="text-2xl font-extrabold text-sky-400 tracking-wider mt-2">
+        <h1 class="text-2xl font-extrabold text-slate-800 tracking-wider mt-2">
           ASIR
         </h1>
       </div>
 
       <div
-        class="flex p-1 rounded-xl mb-6"
-        style="
-          background: var(--asir-subsurface, #0a1119);
-          border: 1px solid var(--asir-border, #1a2d3a);
-        "
-      >
+        class="flex p-1 rounded-lg mb-6 bg-slate-100 border border-slate-200">
         <button
-          id="tabLogin"
-          onclick="mostrarForm('login')"
-          class="w-1/2 py-2 text-xs font-bold rounded-lg transition"
-          style="
-            background: var(--asir-primary, #00e5ff);
-            color: var(--asir-primary-text, #000);
-          "
-        >
+          id="tabLogin" onclick="mostrarForm('login')" class="w-1/2 py-2 text-xs font-bold rounded-md transition bg-[#2CC56A] text-white shadow-sm">
           Iniciar Sesión
         </button>
         <button
-          id="tabRegistro"
-          onclick="mostrarForm('registro')"
-          class="w-1/2 py-2 text-xs font-bold rounded-lg transition"
-          style="color: var(--asir-text-muted, #6b8fa0)"
-        >
+          id="tabRegistro" onclick="mostrarForm('registro')" class="w-1/2 py-2 text-xs font-bold rounded-md transition text-slate-500 hover:text-slate-800">
           Crear Cuenta
         </button>
       </div>
@@ -63,50 +40,29 @@
       <form id="formLogin" onsubmit="ejecutarLogin(event)" class="space-y-4">
         <div>
           <label
-            class="block text-xs font-semibold mb-1"
-            style="color: var(--asir-text-muted, #6b8fa0)"
-            >Correo Electrónico</label
+            class="block text-xs font-medium text-slate-600 mb-1">Correo Electrónico</label
           >
           <input
             type="email"
             id="loginCorreo"
             required
             placeholder="demo@asir.com"
-            class="w-full text-sm rounded-lg p-2.5 focus:outline-none"
-            style="
-              background: var(--asir-input-bg, #0a1119);
-              border: 1px solid var(--asir-border, #1a2d3a);
-              color: var(--asir-text, #e8f4f8);
-            "
-          />
+            class="w-full text-sm rounded-lg p-2.5 bg-white border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#2CC56A] focus:ring-1 focus:ring-[#2CC56A]">
         </div>
         <div>
           <label
-            class="block text-xs font-semibold mb-1"
-            style="color: var(--asir-text-muted, #6b8fa0)"
-            >Contraseña</label
+            class="block text-xs font-medium text-slate-600 mb-1">Contraseña</label
           >
           <input
             type="password"
             id="loginClave"
             required
             placeholder="••••••••"
-            class="w-full text-sm rounded-lg p-2.5 focus:outline-none"
-            style="
-              background: var(--asir-input-bg, #0a1119);
-              border: 1px solid var(--asir-border, #1a2d3a);
-              color: var(--asir-text, #e8f4f8);
-            "
-          />
+            class="w-full text-sm rounded-lg p-2.5 bg-white border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#2CC56A] focus:ring-1 focus:ring-[#2CC56A]">
         </div>
         <button
           type="submit"
-          class="w-full font-bold py-2.5 rounded-lg text-sm transition shadow-lg"
-          style="
-            background: var(--asir-primary, #00e5ff);
-            color: var(--asir-primary-text, #000);
-          "
-        >
+          class="w-full font-bold py-2.5 rounded-lg text-sm transition bg-[#2CC56A] hover:bg-[#24a859] text-white shadow-sm">
           Ingresar al Panel
         </button>
       </form>
@@ -118,139 +74,44 @@
       >
         <div>
           <label
-            class="block text-xs font-semibold mb-1"
-            style="color: var(--asir-text-muted, #6b8fa0)"
-            >Nombre Completo</label
+            class="block text-xs font-medium text-slate-600 mb-1">Nombre Completo</label
           >
           <input
             type="text"
             id="regNombre"
             required
             placeholder="Juan Pérez"
-            class="w-full text-sm rounded-lg p-2.5 focus:outline-none"
-            style="
-              background: var(--asir-input-bg, #0a1119);
-              border: 1px solid var(--asir-border, #1a2d3a);
-              color: var(--asir-text, #e8f4f8);
-            "
-          />
+            class="w-full text-sm rounded-lg p-2.5 bg-white border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#2CC56A] focus:ring-1 focus:ring-[#2CC56A]">
         </div>
         <div>
           <label
-            class="block text-xs font-semibold mb-1"
-            style="color: var(--asir-text-muted, #6b8fa0)"
-            >Correo Electrónico</label
+            class="block text-xs font-medium text-slate-600 mb-1">Correo Electrónico</label
           >
           <input
             type="email"
             id="regCorreo"
             required
             placeholder="tu@campo.com"
-            class="w-full text-sm rounded-lg p-2.5 focus:outline-none"
-            style="
-              background: var(--asir-input-bg, #0a1119);
-              border: 1px solid var(--asir-border, #1a2d3a);
-              color: var(--asir-text, #e8f4f8);
-            "
-          />
+            class="w-full text-sm rounded-lg p-2.5 bg-white border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#2CC56A] focus:ring-1 focus:ring-[#2CC56A]">
         </div>
         <div>
           <label
-            class="block text-xs font-semibold mb-1"
-            style="color: var(--asir-text-muted, #6b8fa0)"
-            >Contraseña</label
+            class="block text-xs font-medium text-slate-600 mb-1">Contraseña</label
           >
           <input
             type="password"
             id="regClave"
             required
             placeholder="••••••••"
-            class="w-full text-sm rounded-lg p-2.5 focus:outline-none"
-            style="
-              background: var(--asir-input-bg, #0a1119);
-              border: 1px solid var(--asir-border, #1a2d3a);
-              color: var(--asir-text, #e8f4f8);
-            "
-          />
+            class="w-full text-sm rounded-lg p-2.5 bg-white border border-slate-300 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#2CC56A] focus:ring-1 focus:ring-[#2CC56A]">
         </div>
         <button
           type="submit"
-          class="w-full font-bold py-2.5 rounded-lg text-sm transition shadow-lg"
-          style="
-            background: var(--asir-primary, #00e5ff);
-            color: var(--asir-primary-text, #000);
-          "
-        >
+          class="w-full font-bold py-2.5 rounded-lg text-sm transition bg-[#2CC56A] hover:bg-[#24a859] text-white shadow-sm">
           Registrar Mi Cuenta
         </button>
       </form>
     </div>
-    <!-- Botón flotante de tema (solo en página de acceso) -->
-    <div
-      style="
-        position: fixed;
-        top: 16px;
-        right: 16px;
-        z-index: 999;
-        display: flex;
-        gap: 6px;
-        background: rgba(10, 17, 25, 0.85);
-        border: 1px solid #1a2d3a;
-        border-radius: 12px;
-        padding: 6px 8px;
-        backdrop-filter: blur(8px);
-      "
-    >
-      <button
-        onclick="cambiarTemaASIR('predeterminado')"
-        title="ASIR Dark"
-        style="
-          font-size: 14px;
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding: 2px 4px;
-          border-radius: 6px;
-        "
-        onmouseover="this.style.background = 'rgba(0,229,255,0.1)'"
-        onmouseout="this.style.background = 'none'"
-      >
-        🌌
-      </button>
-      <button
-        onclick="cambiarTemaASIR('oscuro')"
-        title="Oscuro"
-        style="
-          font-size: 14px;
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding: 2px 4px;
-          border-radius: 6px;
-        "
-        onmouseover="this.style.background = 'rgba(0,229,255,0.1)'"
-        onmouseout="this.style.background = 'none'"
-      >
-        🌑
-      </button>
-      <button
-        onclick="cambiarTemaASIR('claro')"
-        title="Claro"
-        style="
-          font-size: 14px;
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding: 2px 4px;
-          border-radius: 6px;
-        "
-        onmouseover="this.style.background = 'rgba(0,229,255,0.1)'"
-        onmouseout="this.style.background = 'none'"
-      >
-        ☀️
-      </button>
-    </div>
-
     <script src="/js/acceso.js"></script>
   </body>
 </html>

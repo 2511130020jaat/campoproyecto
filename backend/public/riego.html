@@ -8,7 +8,9 @@
     <script src="/js/theme.js"></script>
 
     <script src="/js/auth.js"></script>
-    <script src="/js/sidebar.js"></script>
+    <script src="/js/sidebar.js"></script>    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <script src="/js/riego.js" defer></script>
   </head>
   <body class="font-sans flex min-h-screen">
@@ -43,14 +45,31 @@
 
       <!-- BLOQUE 1: RESUMEN DE OPERACIÓN Y AHORRO HÍDRICO -->
       <section class="space-y-3">
-        <div>
-          <h3 class="text-sm font-bold text-slate-200 uppercase tracking-wider">
-            1. Resumen de Operación y Ahorro Hídrico
-          </h3>
-          <p class="text-xs text-slate-400">
-            Impacto del riego inteligente guiado por sensores y pronóstico de
-            lluvia
-          </p>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-bold text-slate-200 uppercase tracking-wider">
+              1. Resumen de Operación y Ahorro Hídrico
+            </h3>
+            <p class="text-xs text-slate-400">
+              Impacto del riego inteligente guiado por sensores y pronóstico de lluvia
+            </p>
+          </div>
+          <button
+            type="button"
+            onclick="abrirModalHistorialRiego()"
+            class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-400 hover:text-sky-300 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 shadow-sm"
+          >
+            <span>📜</span> Ver Historial Completo de Riegos y Ahorros
+          </button>
+        </div>
+          <button
+            type="button"
+            onclick="abrirModalHistorialRiego()"
+            class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-400 hover:text-sky-300 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-2 shadow-sm"
+          >
+            <span>📜</span> Ver Historial Completo de Riegos y Ahorros
+          </button>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -121,33 +140,60 @@
 
       <hr class="border-slate-800" />
 
-      <!-- BLOQUE 2: MODO DE OPERACIÓN POR PARCELA -->
-      <section class="space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
+      <!-- BLOQUE 2: MODO DE OPERACIÓN POR CAMPO / PARCELA -->
+      <section class="space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
           <div>
-            <h3
-              class="text-sm font-bold text-slate-200 uppercase tracking-wider"
-            >
-              2. Modo de Operación por Campo
+            <h3 class="text-sm font-bold text-slate-200 uppercase tracking-wider">
+              2. Selección de Campo y Modo de Operación
             </h3>
             <p class="text-xs text-slate-400">
-              Define la humedad mínima deseada y elige si cada campo opera de
-              forma inteligente, manual o apagada
+              Elige el campo en el que vas a trabajar para configurar sus válvulas, horarios y ver su ubicación
             </p>
           </div>
-          <span id="lblResumenValvulas" class="text-xs text-slate-400"
-            >Cargando campos...</span
-          >
+          <span id="lblResumenValvulas" class="text-xs text-slate-400">Cargando campos...</span>
         </div>
 
-        <div
-          id="gridSectoresRiego"
-          class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
-        ></div>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+          <!-- Columna Izquierda: Selección de Parcela y Configuración de Operación (7 cols) -->
+          <div class="lg:col-span-7 bg-slate-800 border border-slate-700 rounded-xl p-5 flex flex-col justify-between space-y-4 shadow-sm">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Selecciona la Parcela de Trabajo
+              </label>
+              <select
+                id="selCampoFiltroRiego"
+                onchange="seleccionarCampoRiegoActivo(this.value)"
+                class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg p-2.5 font-semibold focus:outline-none focus:border-sky-500"
+              >
+                <option value="">Cargando parcelas...</option>
+              </select>
+            </div>
+
+            <!-- Tarjeta de control de modo de la parcela seleccionada -->
+            <div id="cardControlSectorSeleccionado" class="space-y-4">
+              <div id="gridSectoresRiego" class="grid grid-cols-1 gap-4">
+                <!-- Se inyecta la tarjeta del campo seleccionado -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Pequeño cuadro con el mapa de la parcela seleccionada (5 cols) -->
+          <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-sm">
+            <div class="p-3 border-b border-slate-700 flex items-center justify-between bg-slate-900/60">
+              <span class="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <span>🗺️</span> Plano del Sector Seleccionado
+              </span>
+              <span id="lblMetaMapaRiego" class="text-[11px] font-mono text-emerald-400">Sector activo</span>
+            </div>
+            <div class="relative flex-grow w-full min-h-[260px] h-[280px]">
+              <div id="mapaRiegoSector" class="w-full h-full z-10"></div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <hr class="border-slate-800" />
-
       <!-- BLOQUE 3: PROGRAMACIÓN DE HORARIOS SEMANALES -->
       <section class="space-y-4">
         <div>
@@ -333,34 +379,41 @@
 
       <hr class="border-slate-800" />
 
-      <!-- BLOQUE 4: HISTORIAL DE RIEGOS Y AHORROS -->
-      <section class="space-y-3">
-        <div class="flex items-center justify-between">
-          <div>
-            <h3
-              class="text-sm font-bold text-slate-200 uppercase tracking-wider"
-            >
-              4. Historial de Riegos y Ahorros
-            </h3>
-            <p class="text-xs text-slate-400">
-              Registro cronológico de activaciones y turnos pospuestos por
-              lluvia
-            </p>
+      <!-- MODAL FLOTANTE: HISTORIAL COMPLETO DE RIEGOS Y AHORROS -->
+      <div
+        id="modalHistorialRiegoCompleto"
+        onclick="if (event.target === this) cerrarModalHistorialRiego();"
+        class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
+      >
+        <div class="bg-slate-800 border border-slate-700 shadow-2xl rounded-2xl w-full max-w-4xl p-5 sm:p-6 space-y-4 relative">
+          <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+            <div>
+              <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                <span>📜</span> Historial Completo de Riegos y Ahorros
+              </h3>
+              <p class="text-xs text-slate-400">Registro cronológico de turnos ejecutados y pospuestos por lluvia</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                onclick="cargarHistorialRiego()"
+                class="bg-slate-900 hover:bg-slate-700 border border-slate-700 text-xs px-3 py-1.5 rounded-lg text-slate-300 transition"
+              >
+                🔄 Actualizar
+              </button>
+              <button
+                type="button"
+                onclick="cerrarModalHistorialRiego()"
+                class="bg-slate-900 hover:text-rose-400 border border-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg text-slate-300 transition"
+              >
+                ✕ Cerrar
+              </button>
+            </div>
           </div>
-          <button
-            onclick="cargarHistorialRiego()"
-            class="text-xs text-sky-400 hover:text-sky-300 font-semibold"
-          >
-            ↻ Actualizar
-          </button>
-        </div>
 
-        <div
-          class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl"
-        >
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm text-slate-300">
-              <thead class="bg-slate-900 text-xs text-slate-400 uppercase">
+          <div class="overflow-x-auto max-h-[460px] overflow-y-auto">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="bg-slate-900 text-[11px] text-slate-400 uppercase sticky top-0 z-10">
                 <tr>
                   <th class="p-3">Campo</th>
                   <th class="p-3">Origen</th>
@@ -369,14 +422,28 @@
                   <th class="p-3">Fecha / Hora</th>
                 </tr>
               </thead>
-              <tbody
-                id="tablaHistorialRiego"
-                class="divide-y divide-slate-700"
-              ></tbody>
+              <tbody id="tablaHistorialRiego" class="divide-y divide-slate-700/80">
+                <tr>
+                  <td colspan="5" class="p-6 text-center text-slate-500">
+                    Cargando historial de riegos...
+                  </td>
+                </tr>
+              </tbody>
             </table>
           </div>
         </div>
-      </section>
-    </main>
+      </div>
+
+      <script>
+        function abrirModalHistorialRiego() {
+          const m = document.getElementById("modalHistorialRiegoCompleto");
+          if (m) m.classList.remove("hidden");
+        }
+        function cerrarModalHistorialRiego() {
+          const m = document.getElementById("modalHistorialRiegoCompleto");
+          if (m) m.classList.add("hidden");
+        }
+      </script>
+      </main>
   </body>
 </html>

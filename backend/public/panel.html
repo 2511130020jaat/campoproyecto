@@ -9,14 +9,15 @@
     <script src="/js/theme.js"></script>
 
     <script src="/js/auth.js"></script>
-    <script src="/js/sidebar.js"></script>
+    <script src="/js/sidebar.js"></script>    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/js/panel.js" defer></script>
   </head>
   <body class="font-sans flex min-h-screen">
     <div id="sidebar-container"></div>
 
-    <main class="flex-grow p-4 md:p-6 space-y-8 min-w-0">
-      <!-- Encabezado y Filtro por Parcela / Nodo -->
+    <main class="flex-grow p-4 md:p-6 space-y-6 min-w-0">
+      <!-- Encabezado y Filtro por Parcela -->
       <header
         class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700/80 pb-4"
       >
@@ -29,8 +30,7 @@
               📡 Sensores en Vivo y Telemetría ESP32
             </h2>
             <p class="text-xs text-slate-400">
-              Estado de conexión individual por nodo físico, lecturas de suelo y
-              registro de paquetes entrantes
+              Selecciona una parcela para ver sus sensores instalados, interactuar con ellos y analizar sus curvas
             </p>
           </div>
         </div>
@@ -48,7 +48,7 @@
             onchange="seleccionarParcelaPanel()"
             class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3.5 py-2 font-semibold focus:outline-none focus:border-sky-500"
           >
-            <option value="">Cargando nodos...</option>
+            <option value="">Cargando parcelas...</option>
           </select>
 
           <button
@@ -62,111 +62,133 @@
         </div>
       </header>
 
-      <!-- BLOQUE 1: TARJETAS INDIVIDUALES POR NODO ESP32 -->
-      <section class="space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
+      <!-- SECCIÓN 1: VISTA INTEGRADA DE LA PARCELA SELECCIONADA Y SUS NODOS ESP32 -->
+      <section class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        <!-- Columna Izquierda: Información y Lista Interactiva de Sensores del Campo (5 cols) -->
+        <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl p-5 flex flex-col justify-between space-y-4">
           <div>
-            <h3
-              class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2"
-            >
-              <span>🔌</span> Nodos de Campo Registrados
-            </h3>
-            <p class="text-xs text-slate-400">
-              Haz clic sobre cualquier placa ESP32 para inspeccionar sus curvas
-              en tiempo real
+            <div class="flex items-center justify-between border-b border-slate-700/80 pb-3">
+              <div>
+                <span id="lblCampoGeneralPanel" class="text-[10px] font-mono uppercase tracking-wider text-sky-400">🏡 Campo General</span>
+                <h3 id="lblTituloParcelaPanel" class="text-base font-bold text-slate-100">Parcela Seleccionada</h3>
+              </div>
+              <span id="lblConteoNodos" class="text-xs font-mono text-emerald-400 font-bold bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700">
+                0 nodos
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-2">
+              Haz clic en cualquier nodo de la lista o en el punto correspondiente sobre el mapa para inspeccionar sus mediciones en tiempo real.
             </p>
           </div>
-          <span id="lblConteoNodos" class="text-xs font-mono text-slate-400">
-            0 nodos activos
-          </span>
+
+          <!-- Lista de placas ESP32 de esta parcela -->
+          <div id="gridNodosEsp32" class="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+            <div class="text-center text-xs text-slate-400 py-6">
+              Cargando sensores de la parcela...
+            </div>
+          </div>
+
+          <!-- Resumen Rápido del Sensor Seleccionado -->
+          <div id="boxResumenNodoActivo" class="bg-slate-900/90 border border-slate-700 rounded-lg p-3 text-xs space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-slate-200" id="lblDetalleNodoMac">Nodo seleccionado</span>
+              <span id="lblDetalleNodoEstado" class="text-[10px] font-bold px-2 py-0.5 rounded-full border">--</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-center pt-1">
+              <div class="bg-slate-800/80 p-2 rounded border border-slate-700">
+                <span class="text-[10px] text-slate-400 block">Suelo</span>
+                <span id="valDetalleSuelo" class="text-sm font-black text-emerald-400">--%</span>
+              </div>
+              <div class="bg-slate-800/80 p-2 rounded border border-slate-700">
+                <span class="text-[10px] text-slate-400 block">Temp.</span>
+                <span id="valDetalleTemp" class="text-sm font-black text-amber-400">--°C</span>
+              </div>
+              <div class="bg-slate-800/80 p-2 rounded border border-slate-700">
+                <span class="text-[10px] text-slate-400 block">Aire</span>
+                <span id="valDetalleAire" class="text-sm font-black text-sky-400">--%</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div
-          id="gridNodosEsp32"
-          class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
-        >
-          <div class="col-span-full text-center text-xs text-slate-400 py-8">
-            Detectando placas ESP32 vinculadas...
+        <!-- Columna Derecha: Mapa Satelital de la Parcela con Nodos ESP32 como Puntos Interactivos (7 cols) -->
+        <div class="lg:col-span-7 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col relative min-h-[360px]">
+          <div class="p-3 border-b border-slate-700 flex items-center justify-between bg-slate-900/60">
+            <div class="flex items-center gap-2">
+              <span class="text-sm">🗺️</span>
+              <span class="text-xs font-bold text-slate-200">Ubicación de Nodos en Parcela</span>
+            </div>
+            <span class="text-[11px] text-slate-400">Puntos interactivos georreferenciados</span>
+          </div>
+
+          <div class="relative flex-grow w-full h-[340px]">
+            <div id="mapaPanelSensores" class="w-full h-full z-10"></div>
           </div>
         </div>
       </section>
 
-      <hr class="border-slate-800" />
-
-      <!-- BLOQUE 2: GRÁFICAS EN VIVO DEL NODO SELECCIONADO -->
+      <!-- SECCIÓN 2: GRÁFICAS ESTADÍSTICAS DEL NODO SELECCIONADO -->
       <section class="space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
           <div>
             <h3
               id="lblNodoSeleccionadoTitulo"
               class="text-sm font-bold uppercase tracking-wider text-sky-400 flex items-center gap-2"
             >
-              <span>📈</span> Curvas en Tiempo Real
+              <span>📈</span> Curvas y Telemetría del Sensor
             </h3>
             <p class="text-xs text-slate-400">
-              Evolución minuto a minuto separada por magnitud física para evitar
-              cruce de escalas
+              Monitoreo continuo en tiempo real de humedad de sustrato y temperatura ambiental
             </p>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <!-- Gráfica A: Humedad de Suelo y Aire (%) -->
-          <div
-            class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl space-y-3"
-          >
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <!-- Gráfica A: Humedad Suelo y Aire -->
+          <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
             <div class="flex items-center justify-between">
               <div>
-                <h4 class="text-sm font-bold text-emerald-400">
-                  💧 Humedad del Suelo y Ambiente (%)
+                <h4 class="text-sm font-bold text-emerald-600 flex items-center gap-1.5">
+                  <span>💧</span> Humedad de Suelo y Ambiente (%)
                 </h4>
                 <p class="text-[11px] text-slate-400">
-                  Lectura capacitiva radicular frente a humedad relativa del
-                  aire
+                  Lectura radicular frente a humedad relativa
                 </p>
               </div>
             </div>
-            <div class="relative h-[240px] w-full">
+            <div class="relative h-[220px] w-full">
               <canvas id="chartSensorHumedad"></canvas>
             </div>
           </div>
 
-          <!-- Gráfica B: Temperatura en Campo (°C) -->
-          <div
-            class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl space-y-3"
-          >
+          <!-- Gráfica B: Temperatura -->
+          <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
             <div class="flex items-center justify-between">
               <div>
-                <h4 class="text-sm font-bold text-amber-400">
-                  🌡️ Temperatura Captada en Parcela (°C)
+                <h4 class="text-sm font-bold text-amber-600 flex items-center gap-1.5">
+                  <span>🌡️</span> Temperatura en Campo (°C)
                 </h4>
                 <p class="text-[11px] text-slate-400">
-                  Registro térmico directo del sensor DHT/DS18B20 en campo
+                  Registro térmico del nodo
                 </p>
               </div>
             </div>
-            <div class="relative h-[240px] w-full">
+            <div class="relative h-[220px] w-full">
               <canvas id="chartSensorTemperatura"></canvas>
             </div>
           </div>
         </div>
       </section>
 
-      <hr class="border-slate-800" />
-
-      <!-- BLOQUE 3: TABLA TÉCNICA DE ÚLTIMOS PAQUETES RECIBIDOS -->
-      <section
-        class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl"
-      >
-        <div
-          class="p-4 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2"
-        >
+      <!-- SECCIÓN 3: TABLA DE PAQUETES RECIBIDOS -->
+      <section class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-sm">
+        <div class="p-3.5 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 class="text-sm font-bold text-slate-200">
-              🧾 Últimos Paquetes Telemétricos Recibidos
+              🧾 Historial de Transmisiones del Nodo
             </h3>
             <p class="text-[11px] text-slate-400">
-              Historial crudo de transmisiones enviadas por el microcontrolador
+              Paquetes telemétricos recibidos por la plataforma
             </p>
           </div>
           <span id="lblTotalPaquetes" class="text-xs font-mono text-slate-400">
@@ -186,10 +208,7 @@
                 <th class="p-3 text-right">Estado Lectura</th>
               </tr>
             </thead>
-            <tbody
-              id="tablaTelemetriaVivo"
-              class="divide-y divide-slate-700/80"
-            >
+            <tbody id="tablaTelemetriaVivo" class="divide-y divide-slate-700/80">
               <tr>
                 <td colspan="6" class="p-6 text-center text-slate-500">
                   Esperando paquetes del sensor...

@@ -1,6 +1,9 @@
 ﻿let parcelasNodos = [];
 let lecturasPorParcela = {};
 let parcelaSeleccionadaId = null;
+let mapaPanel = null;
+let capaMarcadoresNodos = null;
+let capaPoligonoPanel = null;
 let chartHumedad = null;
 let chartTemperatura = null;
 let intervaloLive = null;
@@ -331,6 +334,95 @@ function renderizarTarjetasNodosEsp32() {
 // 3. GRÁFICAS SEPARADAS Y TABLA DEL NODO SELECCIONADO
 // =========================================================================
 
+
+function inicializarMapaPanel() {
+  const cont = document.getElementById("mapaPanelSensores");
+  if (!cont || mapaPanel) return;
+
+  mapaPanel = L.map("mapaPanelSensores", {
+    zoomControl: true,
+    attributionControl: false
+  }).setView([-12.046374, -77.042793], 15);
+
+  L.tileLayer("https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+    maxZoom: 21,
+    subdomains: ["mt0", "mt1", "mt2", "mt3"]
+  }).addTo(mapaPanel);
+
+  capaPoligonoPanel = L.layerGroup().addTo(mapaPanel);
+  capaMarcadoresNodos = L.layerGroup().addTo(mapaPanel);
+}
+
+function actualizarMapaParcelaYNodos(parcela, lecturas) {
+  if (!mapaPanel) {
+    inicializarMapaPanel();
+  }
+  if (!mapaPanel) return;
+
+  capaPoligonoPanel.clearLayers();
+  capaMarcadoresNodos.clearLayers();
+
+  let bounds = null;
+
+  // 1. Dibujar polígono de la parcela si existe
+  if (parcela && parcela.poligono_json) {
+    try {
+      const geo = typeof parcela.poligono_json === "string" ? JSON.parse(parcela.poligono_json) : parcela.poligono_json;
+      if (Array.isArray(geo) && geo.length >= 3) {
+        const poly = L.polygon(geo, {
+          color: "#2CC56A",
+          weight: 2.5,
+          fillColor: "#2CC56A",
+          fillOpacity: 0.18
+        }).addTo(capaPoligonoPanel);
+
+        bounds = poly.getBounds();
+        mapaPanel.fitBounds(bounds, { padding: [25, 25], maxZoom: 18 });
+      }
+    } catch(e) {}
+  }
+
+  // 2. Si tiene coordenadas centrales o de lat/lng
+  if (!bounds && parcela && parcela.latitud && parcela.longitud) {
+    const lat = parseFloat(parcela.latitud);
+    const lng = parseFloat(parcela.longitud);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      mapaPanel.setView([lat, lng], 17);
+    }
+  }
+
+  // 3. Crear marcador del nodo/ESP32
+  let posMarker = null;
+  if (bounds) {
+    posMarker = bounds.getCenter();
+  } else if (parcela && parcela.latitud && parcela.longitud) {
+    posMarker = [parseFloat(parcela.latitud), parseFloat(parcela.longitud)];
+  } else {
+    posMarker = [-12.046374, -77.042793];
+  }
+
+  const ultima = lecturas && lecturas.length > 0 ? lecturas[0] : null;
+  const hum = ultima && ultima.humedad_suelo !== undefined ? Number(ultima.humedad_suelo).toFixed(1) + "%" : "--";
+  const temp = ultima && ultima.temperatura !== undefined ? Number(ultima.temperatura).toFixed(1) + "°C" : "--";
+  const mac = parcela.codigo_mac || "ESP32";
+
+  const customIcon = L.divIcon({
+    className: "custom-esp32-pin",
+    html: `<div style="background:#0a110d;border:2px solid #2CC56A;border-radius:12px;padding:3px 7px;box-shadow:0 2px 10px rgba(0,0,0,0.6);font-size:10px;font-weight:800;color:#2CC56A;display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer;">
+      <span style="font-size:12px;">📡</span>
+      <span>${mac}: ${hum}</span>
+    </div>`,
+    iconSize: [90, 26],
+    iconAnchor: [45, 13]
+  });
+
+  const marker = L.marker(posMarker, { icon: customIcon }).addTo(capaMarcadoresNodos);
+  marker.bindPopup(`<b>${parcela.parcela || parcela.nombre}</b><br>Nodo: ${mac}<br>Humedad Suelo: ${hum}<br>Temperatura: ${temp}`);
+
+  setTimeout(() => {
+    if (mapaPanel) mapaPanel.invalidateSize();
+  }, 200);
+}
 function renderizarDetalleNodoSeleccionado() {
   const parcela =
     parcelasNodos.find((p) => String(p.id) === String(parcelaSeleccionadaId)) ||
@@ -347,6 +439,29 @@ function renderizarDetalleNodoSeleccionado() {
     titulo.innerHTML = `<span>📈</span> Curvas en Tiempo Real — ${nombre} <span class="font-mono text-xs text-amber-400">(${mac})</span>`;
   }
 
+    const lblCampoGen = document.getElementById("lblCampoGeneralPanel");
+  const lblTitParc = document.getElementById("lblTituloParcelaPanel");
+  if (lblCampoGen) lblCampoGen.innerText = parcela.campo_general ? `🏡 ${parcela.campo_general}` : "🏡 Parcela";
+  if (lblTitParc) lblTitParc.innerText = `#${parcela.id} - ${nombre}`;
+
+  const ultima = lecturas[0] || null;
+  const estado = evaluarEstadoConexionNodo(ultima);
+  const lblMacDetalle = document.getElementById("lblDetalleNodoMac");
+  const lblEstadoDetalle = document.getElementById("lblDetalleNodoEstado");
+  const valSuelo = document.getElementById("valDetalleSuelo");
+  const valTemp = document.getElementById("valDetalleTemp");
+  const valAire = document.getElementById("valDetalleAire");
+
+  if (lblMacDetalle) lblMacDetalle.innerText = `🔌 ${mac} (${parcela.cultivo || "Cultivo"})`;
+  if (lblEstadoDetalle) {
+    lblEstadoDetalle.className = `text-[10px] font-bold px-2 py-0.5 rounded-full border ${estado.claseBadge}`;
+    lblEstadoDetalle.innerText = estado.etiqueta;
+  }
+  if (valSuelo) valSuelo.innerText = ultima && ultima.humedad_suelo !== undefined ? Number(ultima.humedad_suelo).toFixed(1) + "%" : "--";
+  if (valTemp) valTemp.innerText = ultima && ultima.temperatura !== undefined ? Number(ultima.temperatura).toFixed(1) + "°C" : "--";
+  if (valAire) valAire.innerText = ultima && ultima.humedad_aire ? Number(ultima.humedad_aire).toFixed(0) + "%" : "--";
+
+  actualizarMapaParcelaYNodos(parcela, lecturas);
   renderizarGraficasNodo(lecturas);
   renderizarTablaPaquetesNodo(parcela, lecturas);
 }

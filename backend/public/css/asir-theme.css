@@ -16,12 +16,7 @@
 html[data-theme="predeterminado"] {
   /* Fondos */
   --asir-bg: #080a09;
-  --asir-bg-gradient: linear-gradient(
-    160deg,
-    #080a09 0%,
-    #0a110d 60%,
-    #07090a 100%
-  );
+  --asir-bg-gradient: #f8fafc;
   --asir-surface: #0f1a13;
   --asir-subsurface: #0c1510;
   --asir-advice-bg: #0a1a10;
@@ -69,7 +64,7 @@ html[data-theme="predeterminado"] {
 /* ── TEMA OSCURO NEUTRO — Dark con acento verde suavizado ──────────────── */
 html[data-theme="oscuro"] {
   --asir-bg: #090909;
-  --asir-bg-gradient: linear-gradient(180deg, #090909 0%, #060606 100%);
+  --asir-bg-gradient: #f8fafc;
   --asir-surface: #111312;
   --asir-subsurface: #181c19;
   --asir-advice-bg: #181c19;
@@ -108,13 +103,13 @@ html[data-theme="oscuro"] {
 
 /* ── TEMA CLARO — Light Brand (verde logo sobre blanco) ────────────────── */
 html[data-theme="claro"] {
-  --asir-bg: #f2fbf5;
-  --asir-bg-gradient: linear-gradient(160deg, #f2fbf5 0%, #e8f7ee 100%);
+  --asir-bg: #f8fafc;
+  --asir-bg-gradient: #f8fafc;
   --asir-surface: #ffffff;
   --asir-subsurface: #f5fdf7;
   --asir-advice-bg: #edfaf2;
 
-  --asir-border: #c0e8cf;
+  --asir-border: #e2e8f0;
   --asir-border-hover: #1fa855;
 
   /* Verde más oscuro para contraste sobre blanco */
@@ -125,9 +120,9 @@ html[data-theme="claro"] {
   --asir-accent: #1e1e6e;
   --asir-accent-dim: rgba(30, 30, 110, 0.1);
 
-  --asir-glow: 0 2px 12px rgba(31, 168, 85, 0.08);
-  --asir-glow-hover: 0 4px 20px rgba(31, 168, 85, 0.16);
-  --asir-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+  --asir-glow: none;
+  --asir-glow-hover: none;
+  --asir-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 
   --asir-text: #0d1f14;
   --asir-text-muted: #3a6b4e;
@@ -533,4 +528,48 @@ html[data-theme="claro"] .hover\:bg-sky-500:hover {
 
 #contenedorCarrusel button:hover {
   background-color: rgba(5, 8, 6, 0.95) !important;
+}
+
+
+/* ── ESTILO MINIMALISTA DE TARJETAS (Dashboard limpio sin sombras excesivas) ── */
+.rounded-3xl,
+.rounded-2xl {
+  border-radius: 10px !important;
+}
+
+.shadow-2xl,
+.shadow-xl,
+.shadow-lg {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Modo claro: fondo blanco limpio para cards, bordes suaves y sin glow */
+html[data-theme="claro"] .asir-glass,
+html[data-theme="claro"] .asir-subcard,
+html[data-theme="claro"] .asir-advice-card,
+html[data-theme="claro"] .bg-slate-800,
+html[data-theme="claro"] .bg-slate-800\/80,
+html[data-theme="claro"] .bg-slate-800\/90 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+html[data-theme="claro"] .asir-neon-card,
+html[data-theme="claro"] .asir-cyan-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+html[data-theme="claro"] .asir-neon-card:hover,
+html[data-theme="claro"] .asir-cyan-card:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
+  border-color: #2CC56A !important;
+}
+
+/* Modo oscuro: sombras sutiles sin glows exagerados */
+html[data-theme="predeterminado"] .asir-neon-card,
+html[data-theme="predeterminado"] .asir-cyan-card,
+html[data-theme="oscuro"] .asir-neon-card,
+html[data-theme="oscuro"] .asir-cyan-card {
+  box-shadow: none !important;
 }
