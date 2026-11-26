@@ -4,9 +4,16 @@ let capaCalle = null;
 let esSatelite = true;
 let capaPoligonosGuardados = null;
 let parcelasCache = [];
+let camposCache = [];
+let contornosCamposGuardados = [];
 let pulsoClimaticoMap = {};
 let chartDetalle = null;
 let ultimoBoundsVista = null;
+
+// Estado del selector desplegable inferior en Vista de Campo
+let menuOpcionesAbierto = false;
+let seccionDesplegada = null; // "CAMPOS" | "PARCELAS" | null
+let campoActivoDesplegado = null; // nombre del campo seleccionado o null
 
 const COORD_DEFECTO = [-12.6581, -76.6321];
 
@@ -14,6 +21,24 @@ document.addEventListener("DOMContentLoaded", () => {
   inicializarMapa();
   cargarParcelasUsuario();
 });
+
+function claveStorageCampos() {
+  const uid =
+    typeof usuarioSesion !== "undefined" && usuarioSesion?.id
+      ? usuarioSesion.id
+      : "default";
+  return `asir_contornos_campos_${uid}`;
+}
+
+function leerContornosCamposLocal() {
+  try {
+    const raw = localStorage.getItem(claveStorageCampos());
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return [];
+  }
+}
 
 // =========================================================================
 // 1. MAPA SATELITAL DE EXPLORACIÓN (SIN DIBUJO ACCIDENTAL)
@@ -79,7 +104,7 @@ function centrarTodasLasParcelas() {
 }
 
 // =========================================================================
-// 2. CÁLCULOS GEOMÉTRICOS Y ENVOLTURA DEL CAMPO GENERAL
+// 2. CÁLCULOS GEOMÉTRICOS Y ENVOLTURA DE CAMPO
 // =========================================================================
 
 function parsearPoligonoGuardado(raw) {
@@ -200,7 +225,6 @@ function calcularEnvolturaConvexa(puntos) {
   });
 
   if (unicos.length < 3) return [];
-
   unicos.sort((a, b) => (a[1] === b[1] ? a[0] - b[0] : a[1] - b[1]));
 
   const cruz = (o, a, b) =>
@@ -234,7 +258,6 @@ function calcularEnvolturaConvexa(puntos) {
   const hull = inferior.concat(superior);
   if (hull.length < 3) return [];
 
-  // Expandir levemente (~5m) desde el centroide para enmarcar sin superponerse al borde verde
   const cLat = hull.reduce((acc, p) => acc + p[0], 0) / hull.length;
   const cLng = hull.reduce((acc, p) => acc + p[1], 0) / hull.length;
 
@@ -356,7 +379,7 @@ function generarSvgSiluetaParcela(poligono, diseno2d = null) {
 }
 
 // =========================================================================
-// 4. CARGA Y RENDERIZADO AGRUPADO POR CAMPO GENERAL
+// 4. CARGA Y RENDERIZADO (MAPA COMPLETO + DESPLEGABLE CAMPOS / PARCELAS)
 // =========================================================================
 
 async function cargarParcelasUsuario() {
@@ -364,14 +387,40 @@ async function cargarParcelasUsuario() {
   if (!contenedor || typeof usuarioSesion === "undefined" || !usuarioSesion)
     return;
 
+  contornosCamposGuardados = leerContornosCamposLocal();
+
   try {
-    const [resParcelas, resPulso] = await Promise.all([
+    const [resParcelas, resCampos, resPulso] = await Promise.all([
       fetch("/api/parcelas?id_usuario=" + usuarioSesion.id),
+      fetch("/api/campos?id_usuario=" + usuarioSesion.id).catch(() => null),
       fetch("/api/alertas-agro/" + usuarioSesion.id).catch(() => null),
     ]);
 
     const parcelas = await resParcelas.json();
     parcelasCache = Array.isArray(parcelas) ? parcelas : [];
+
+    if (resCampos && resCampos.ok) {
+      const dataCampos = await resCampos.json();
+      camposCache = Array.isArray(dataCampos) ? dataCampos : [];
+      dataCampos.forEach((c) => {
+        const pol = parsearPoligonoGuardado(c.poligono_json);
+        if (pol.length >= 3) {
+          const nombreLimpio = (c.nombre || "").trim();
+          const idx = contornosCamposGuardados.findIndex(
+            (item) =>
+              (c.id && String(item.id) === String(c.id)) ||
+              item.nombre.toLowerCase() === nombreLimpio.toLowerCase(),
+          );
+          const entrada = {
+            id: c.id || null,
+            nombre: nombreLimpio,
+            poligono: pol,
+          };
+          if (idx >= 0) contornosCamposGuardados[idx] = entrada;
+          else contornosCamposGuardados.push(entrada);
+        }
+      });
+    }
 
     pulsoClimaticoMap = {};
     if (resPulso && resPulso.ok) {
@@ -390,28 +439,52 @@ async function cargarParcelasUsuario() {
   }
 }
 
+function obtenerCamposDisponibles() {
+  const mapaCampos = new Map();
+
+  camposCache.forEach((c) => {
+    const nombre = (c.nombre || "").trim();
+    if (!nombre) return;
+    mapaCampos.set(nombre.toLowerCase(), nombre);
+  });
+
+  contornosCamposGuardados.forEach((c) => {
+    const nombre = (c.nombre || "").trim();
+    if (!nombre) return;
+    if (!mapaCampos.has(nombre.toLowerCase())) {
+      mapaCampos.set(nombre.toLowerCase(), nombre);
+    }
+  });
+
+  parcelasCache.forEach((p) => {
+    const nombre = (p.campo_general || "").trim();
+    if (!nombre) return;
+    if (!mapaCampos.has(nombre.toLowerCase())) {
+      mapaCampos.set(nombre.toLowerCase(), nombre);
+    }
+  });
+
+  return Array.from(mapaCampos.values()).sort((a, b) => a.localeCompare(b));
+}
+
+function obtenerParcelasSinCampo() {
+  return parcelasCache.filter((p) => !(p.campo_general || "").trim());
+}
+
 function poblarSelectorCampoGeneral() {
   const sel = document.getElementById("selFiltroCampoGeneral");
   if (!sel) return;
 
   const valorActual = sel.value || "TODOS";
-  const camposUnicos = new Set();
-  let hayIndependientes = false;
-
-  parcelasCache.forEach((p) => {
-    const cg = (p.campo_general || "").trim();
-    if (cg) camposUnicos.add(cg);
-    else hayIndependientes = true;
-  });
+  const camposOrdenados = obtenerCamposDisponibles();
+  const sinCampo = obtenerParcelasSinCampo();
 
   sel.innerHTML = '<option value="TODOS">🏡 Todos los campos</option>';
-  Array.from(camposUnicos)
-    .sort((a, b) => a.localeCompare(b))
-    .forEach((cg) => {
-      sel.innerHTML += `<option value="${cg}">🏡 ${cg}</option>`;
-    });
+  camposOrdenados.forEach((cg) => {
+    sel.innerHTML += `<option value="${cg}">🏡 ${cg}</option>`;
+  });
 
-  if (hayIndependientes && camposUnicos.size > 0) {
+  if (sinCampo.length > 0 && camposOrdenados.length > 0) {
     sel.innerHTML +=
       '<option value="__SIN_CAMPO__">🌱 Parcelas Independientes</option>';
   }
@@ -422,7 +495,144 @@ function poblarSelectorCampoGeneral() {
 }
 
 function filtrarPorCampoGeneral() {
+  const sel = document.getElementById("selFiltroCampoGeneral");
+  const val = sel ? sel.value : "TODOS";
+
+  if (val === "__SIN_CAMPO__") {
+    seccionDesplegada = "PARCELAS";
+    campoActivoDesplegado = null;
+  } else if (val !== "TODOS") {
+    seccionDesplegada = "CAMPOS";
+    campoActivoDesplegado = val;
+  }
   renderizarVistaDeCampo();
+}
+
+function alternarMenuOpcionesVisualizar() {
+  menuOpcionesAbierto = !menuOpcionesAbierto;
+  renderizarVistaDeCampo();
+}
+
+function seleccionarOpcionVisualizar(opcion) {
+  seccionDesplegada = opcion;
+  menuOpcionesAbierto = false;
+
+  if (opcion === "CAMPOS") {
+    const campos = obtenerCamposDisponibles();
+    if (!campoActivoDesplegado && campos.length > 0) {
+      campoActivoDesplegado = campos[0];
+    }
+  } else if (opcion === "PARCELAS") {
+    campoActivoDesplegado = null;
+  }
+
+  renderizarVistaDeCampo();
+}
+
+function seleccionarCampoDesplegado(nombreCampo) {
+  seccionDesplegada = "CAMPOS";
+  campoActivoDesplegado = nombreCampo;
+  menuOpcionesAbierto = false;
+  renderizarVistaDeCampo();
+}
+
+function construirTarjetaParcelaHtml(p, nombreCampoGrupo = "") {
+  const nombre = p.parcela || p.nombre || "Sector";
+  const cultivo = p.cultivo || "General";
+  const macs = p.lista_macs || p.codigo_mac || "Sin sensor";
+  const poligono = parsearPoligonoGuardado(p.poligono_json);
+  const metricas = calcularMetricasPoligono(poligono);
+  const pulso = pulsoClimaticoMap[p.id] || null;
+
+  const areaM2 =
+    p.area_m2 && parseFloat(p.area_m2) > 0
+      ? parseFloat(p.area_m2)
+      : metricas.areaM2;
+  const areaTexto =
+    areaM2 > 0
+      ? `${Math.round(areaM2).toLocaleString()} m² (${(areaM2 / 10000).toFixed(2)} ha)`
+      : "Sin contorno";
+
+  const dimTexto =
+    metricas.anchoM > 0 && metricas.altoM > 0
+      ? `~${Math.round(metricas.anchoM)}m × ${Math.round(metricas.altoM)}m`
+      : "Solo punto GPS";
+
+  const humSueloTxt =
+    pulso && pulso.humedad_suelo !== null
+      ? `${Number(pulso.humedad_suelo).toFixed(0)}% suelo`
+      : "Sin lectura";
+
+  const colorEstado =
+    pulso?.estado === "CRITICO"
+      ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+      : pulso?.estado === "ATENCION"
+        ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+        : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+
+  const svgCroquis = generarSvgSiluetaParcela(poligono);
+
+  return `
+    <article class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl flex flex-col justify-between hover:border-slate-500 transition group">
+      <div>
+        <div class="relative h-36 bg-slate-950 border-b border-slate-700/80 p-2">
+          ${svgCroquis}
+          <span class="absolute top-3 left-3 bg-slate-900/90 border border-slate-700 text-sky-400 font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-lg">
+            #${p.id}
+          </span>
+          <span class="absolute top-3 right-3 border text-[10px] font-bold px-2.5 py-0.5 rounded-full backdrop-blur-sm ${colorEstado}">
+            💧 ${humSueloTxt}
+          </span>
+        </div>
+
+        <div class="p-4 space-y-3">
+          <div>
+            ${nombreCampoGrupo ? `<span class="text-[10px] font-bold text-amber-300 block mb-0.5">🏡 ${nombreCampoGrupo}</span>` : ""}
+            <h4 class="text-base font-bold text-slate-100 group-hover:text-sky-400 transition truncate">
+              ${nombre}
+            </h4>
+            <p class="text-xs text-slate-400 mt-0.5">
+              🌱 Cultivo: <span class="text-slate-200 font-semibold">${cultivo}</span>
+            </p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-700/70">
+              <span class="block text-[10px] text-slate-500 uppercase">Superficie</span>
+              <span class="font-mono font-bold text-emerald-400 text-xs">${areaTexto}</span>
+            </div>
+            <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-700/70">
+              <span class="block text-[10px] text-slate-500 uppercase">Dimensiones</span>
+              <span class="font-mono font-bold text-slate-200 text-xs">${dimTexto}</span>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1 gap-2">
+            <span class="truncate">📡 <strong class="font-mono text-amber-400">${macs}</strong></span>
+            <span class="shrink-0">Umbral: <strong class="text-slate-200">${p.umbral_humedad ?? 35}%</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-4 pb-4 pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onclick="verDetalleParcela(${p.id})"
+          class="flex-grow bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold py-2 px-3 rounded-xl transition shadow flex items-center justify-center gap-1.5"
+        >
+          <span>🔍 Ver más</span>
+        </button>
+
+        <a
+          href="/gestion-parcelas.html?editar=${p.id}"
+          title="Editar contorno y datos en Gestor de Parcelas"
+          class="bg-slate-900 hover:bg-amber-500/20 text-amber-300 border border-slate-700 text-xs font-semibold py-2 px-3 rounded-xl transition"
+        >
+          ✏️
+        </a>
+      </div>
+    </article>
+  `;
 }
 
 function renderizarVistaDeCampo() {
@@ -451,282 +661,139 @@ function renderizarVistaDeCampo() {
     capaPoligonosGuardados.clearLayers();
   }
 
-  if (parcelasFiltradas.length === 0) {
-    if (lblResumenArea)
-      lblResumenArea.innerText = "Superficie total mapeada: 0 m²";
-    contenedor.innerHTML = `
-      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center space-y-3">
-        <span class="text-4xl block">🌱</span>
-        <h4 class="text-base font-bold text-slate-200">No hay parcelas registradas en esta vista</h4>
-        <p class="text-xs text-slate-400 max-w-md mx-auto">
-          Ve al <strong>Gestor de Parcelas</strong> para crear un campo general, delimitar sus parcelas en el mapa y vincular tus sensores.
-        </p>
-        <a href="/gestion-parcelas.html" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition">
-          🧭 Ir al Gestor de Parcelas
-        </a>
-      </div>
-    `;
-    return;
-  }
-
-  // Agrupar por Campo General (Fundo)
-  const gruposMap = new Map();
-  parcelasFiltradas.forEach((p) => {
-    const clave = (p.campo_general || "").trim() || "__INDEPENDIENTES__";
-    if (!gruposMap.has(clave)) {
-      gruposMap.set(clave, []);
-    }
-    gruposMap.get(clave).push(p);
-  });
-
   const todosLosPuntos = [];
   let areaGlobalM2 = 0;
-  contenedor.innerHTML = "";
 
-  gruposMap.forEach((listaGrupo, claveGrupo) => {
-    const esCampoNombrado = claveGrupo !== "__INDEPENDIENTES__";
-    const tituloGrupo = esCampoNombrado
-      ? claveGrupo
-      : "Parcelas Independientes";
+  // 1. Dibujar contornos de Campos en el mapa satelital
+  const camposDisponibles = obtenerCamposDisponibles();
+  const puntosPorCampo = new Map();
 
-    let areaGrupoM2 = 0;
-    const puntosGrupo = [];
+  parcelasCache.forEach((p) => {
+    const cg = (p.campo_general || "").trim();
+    if (!cg) return;
+    const clave = cg.toLowerCase();
+    if (!puntosPorCampo.has(clave)) puntosPorCampo.set(clave, []);
+    const pol = parsearPoligonoGuardado(p.poligono_json);
+    if (pol.length >= 3) {
+      pol.forEach((pt) => puntosPorCampo.get(clave).push(pt));
+    } else if (
+      p.latitud !== null &&
+      p.longitud !== null &&
+      p.latitud !== "" &&
+      p.longitud !== ""
+    ) {
+      puntosPorCampo
+        .get(clave)
+        .push([parseFloat(p.latitud), parseFloat(p.longitud)]);
+    }
+  });
 
-    listaGrupo.forEach((p) => {
-      const pol = parsearPoligonoGuardado(p.poligono_json);
-      const met = calcularMetricasPoligono(pol);
-      const a =
-        p.area_m2 && parseFloat(p.area_m2) > 0
-          ? parseFloat(p.area_m2)
-          : met.areaM2;
-      areaGrupoM2 += a;
-      areaGlobalM2 += a;
+  camposDisponibles.forEach((nombreCampo) => {
+    if (
+      filtroCampo !== "TODOS" &&
+      filtroCampo !== "__SIN_CAMPO__" &&
+      nombreCampo !== filtroCampo
+    ) {
+      return;
+    }
 
-      if (pol.length >= 3) {
-        pol.forEach((pt) => {
-          puntosGrupo.push(pt);
-          todosLosPuntos.push(pt);
-        });
-      } else if (
-        p.latitud !== null &&
-        p.longitud !== null &&
-        p.latitud !== "" &&
-        p.longitud !== ""
-      ) {
-        const pt = [parseFloat(p.latitud), parseFloat(p.longitud)];
-        puntosGrupo.push(pt);
-        todosLosPuntos.push(pt);
-      }
-    });
+    const clave = nombreCampo.toLowerCase();
+    const contornoGuardado = contornosCamposGuardados.find(
+      (c) => (c.nombre || "").trim().toLowerCase() === clave,
+    );
+    let polCampo =
+      contornoGuardado &&
+      Array.isArray(contornoGuardado.poligono) &&
+      contornoGuardado.poligono.length >= 3
+        ? contornoGuardado.poligono
+        : null;
 
-    // Dibujar envoltura del Campo General en el mapa si tiene nombre y >=3 puntos
-    if (esCampoNombrado && puntosGrupo.length >= 3 && capaPoligonosGuardados) {
-      const hull = calcularEnvolturaConvexa(puntosGrupo);
-      if (hull.length >= 3) {
-        const hullLayer = L.polygon(hull, {
-          color: "#f59e0b",
-          weight: 2.5,
-          dashArray: "8, 6",
-          fillColor: "#f59e0b",
-          fillOpacity: 0.06,
-        }).addTo(capaPoligonosGuardados);
-
-        hullLayer.bindPopup(
-          `<b>🏡 Campo General: ${tituloGrupo}</b><br>Parcelas: ${listaGrupo.length}<br>Área acumulada: ${Math.round(areaGrupoM2).toLocaleString()} m² (${(areaGrupoM2 / 10000).toFixed(2)} ha)`,
-        );
+    if (!polCampo) {
+      const pts = puntosPorCampo.get(clave) || [];
+      if (pts.length >= 3) {
+        polCampo = calcularEnvolturaConvexa(pts);
       }
     }
 
-    // Dibujar cada parcela individual en el mapa
-    listaGrupo.forEach((p) => {
-      const nombre = p.parcela || p.nombre || "Parcela #" + p.id;
-      const cultivo = p.cultivo || "General";
-      const pol = parsearPoligonoGuardado(p.poligono_json);
-      const met = calcularMetricasPoligono(pol);
-      const areaM2 =
-        p.area_m2 && parseFloat(p.area_m2) > 0
-          ? parseFloat(p.area_m2)
-          : met.areaM2;
+    if (polCampo && polCampo.length >= 3 && capaPoligonosGuardados) {
+      polCampo.forEach((pt) => todosLosPuntos.push(pt));
+      const parcelasDelCampo = parcelasCache.filter(
+        (p) => (p.campo_general || "").trim().toLowerCase() === clave,
+      );
+      const layerCampo = L.polygon(polCampo, {
+        color: "#f59e0b",
+        weight: 2.5,
+        dashArray: "8, 6",
+        fillColor: "#f59e0b",
+        fillOpacity: 0.05,
+      }).addTo(capaPoligonosGuardados);
 
-      if (pol.length >= 3 && capaPoligonosGuardados) {
-        const polyLayer = L.polygon(pol, {
-          color: "#00E5FF",
-          weight: 2.5,
-          fillColor: "#00E5FF",
-          fillOpacity: 0.26,
-        }).addTo(capaPoligonosGuardados);
+      layerCampo.bindPopup(
+        `<b>🏡 Campo: ${nombreCampo}</b><br>Parcelas registradas: ${parcelasDelCampo.length}`,
+      );
+    }
+  });
 
-        polyLayer.on("mouseover", () =>
-          polyLayer.setStyle({ fillOpacity: 0.42, weight: 3.5 }),
-        );
-        polyLayer.on("mouseout", () =>
-          polyLayer.setStyle({ fillOpacity: 0.26, weight: 2.5 }),
-        );
+  // 2. Dibujar todas las parcelas filtradas en el mapa satelital
+  parcelasFiltradas.forEach((p) => {
+    const nombre = p.parcela || p.nombre || "Parcela #" + p.id;
+    const cultivo = p.cultivo || "General";
+    const cg = (p.campo_general || "").trim();
+    const pol = parsearPoligonoGuardado(p.poligono_json);
+    const met = calcularMetricasPoligono(pol);
+    const areaM2 =
+      p.area_m2 && parseFloat(p.area_m2) > 0
+        ? parseFloat(p.area_m2)
+        : met.areaM2;
+    areaGlobalM2 += areaM2;
 
-        polyLayer.bindPopup(`
-          <div style="min-width:165px;">
-            ${esCampoNombrado ? `<div style="font-size:10px;color:#b45309;font-weight:700;">🏡 ${tituloGrupo}</div>` : ""}
-            <div style="font-size:13px;font-weight:800;color:#0f172a;">#${p.id} ${nombre}</div>
-            <div style="font-size:11px;color:#334155;">🌱 ${cultivo} • ${Math.round(areaM2).toLocaleString()} m²</div>
-            <button onclick="verDetalleParcela(${p.id})" style="margin-top:6px;width:100%;background:#0284c7;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">
-              🔍 Ver ficha completa
-            </button>
-          </div>
-        `);
-      } else if (
-        p.latitud !== null &&
-        p.longitud !== null &&
-        p.latitud !== "" &&
-        p.longitud !== "" &&
-        capaPoligonosGuardados
-      ) {
-        L.circleMarker([parseFloat(p.latitud), parseFloat(p.longitud)], {
-          radius: 8,
-          fillColor: "#00b4cc",
-          color: "#ffffff",
-          weight: 2,
-          fillOpacity: 0.9,
-        })
-          .addTo(capaPoligonosGuardados)
-          .bindPopup(
-            `<b>#${p.id} ${nombre}</b><br>Cultivo: ${cultivo}<br><a href="javascript:void(0)" onclick="verDetalleParcela(${p.id})">🔍 Ver más</a>`,
-          );
-      }
-    });
+    if (pol.length >= 3 && capaPoligonosGuardados) {
+      pol.forEach((pt) => todosLosPuntos.push(pt));
+      const polyLayer = L.polygon(pol, {
+        color: "#00E5FF",
+        weight: 2.5,
+        fillColor: "#00E5FF",
+        fillOpacity: 0.26,
+      }).addTo(capaPoligonosGuardados);
 
-    // Construir bloque visual del Campo General + Tarjetas de sus parcelas
-    const areaGrupoTxt =
-      areaGrupoM2 > 0
-        ? `${Math.round(areaGrupoM2).toLocaleString()} m² (${(areaGrupoM2 / 10000).toFixed(2)} ha)`
-        : "Sin superficie mapeada";
+      polyLayer.on("mouseover", () =>
+        polyLayer.setStyle({ fillOpacity: 0.42, weight: 3.5 }),
+      );
+      polyLayer.on("mouseout", () =>
+        polyLayer.setStyle({ fillOpacity: 0.26, weight: 2.5 }),
+      );
 
-    let tarjetasHtml = "";
-    listaGrupo.forEach((p) => {
-      const nombre = p.parcela || p.nombre || "Sector";
-      const cultivo = p.cultivo || "General";
-      const macs = p.lista_macs || p.codigo_mac || "Sin sensor";
-      const poligono = parsearPoligonoGuardado(p.poligono_json);
-      const metricas = calcularMetricasPoligono(poligono);
-      const pulso = pulsoClimaticoMap[p.id] || null;
-
-      const areaM2 =
-        p.area_m2 && parseFloat(p.area_m2) > 0
-          ? parseFloat(p.area_m2)
-          : metricas.areaM2;
-      const areaTexto =
-        areaM2 > 0
-          ? `${Math.round(areaM2).toLocaleString()} m² (${(areaM2 / 10000).toFixed(2)} ha)`
-          : "Sin contorno";
-
-      const dimTexto =
-        metricas.anchoM > 0 && metricas.altoM > 0
-          ? `~${Math.round(metricas.anchoM)}m × ${Math.round(metricas.altoM)}m`
-          : "Solo punto GPS";
-
-      const humSueloTxt =
-        pulso && pulso.humedad_suelo !== null
-          ? `${Number(pulso.humedad_suelo).toFixed(0)}% suelo`
-          : "Sin lectura";
-
-      const colorEstado =
-        pulso?.estado === "CRITICO"
-          ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
-          : pulso?.estado === "ATENCION"
-            ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-            : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
-
-      const svgCroquis = generarSvgSiluetaParcela(poligono);
-
-      tarjetasHtml += `
-        <article class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl flex flex-col justify-between hover:border-slate-500 transition group">
-          <div>
-            <div class="relative h-36 bg-slate-950 border-b border-slate-700/80 p-2">
-              ${svgCroquis}
-              <span class="absolute top-3 left-3 bg-slate-900/90 border border-slate-700 text-sky-400 font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-lg">
-                #${p.id}
-              </span>
-              <span class="absolute top-3 right-3 border text-[10px] font-bold px-2.5 py-0.5 rounded-full backdrop-blur-sm ${colorEstado}">
-                💧 ${humSueloTxt}
-              </span>
-            </div>
-
-            <div class="p-4 space-y-3">
-              <div>
-                <h4 class="text-base font-bold text-slate-100 group-hover:text-sky-400 transition truncate">
-                  ${nombre}
-                </h4>
-                <p class="text-xs text-slate-400 mt-0.5">
-                  🌱 Cultivo: <span class="text-slate-200 font-semibold">${cultivo}</span>
-                </p>
-              </div>
-
-              <div class="grid grid-cols-2 gap-2 text-xs">
-                <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-700/70">
-                  <span class="block text-[10px] text-slate-500 uppercase">Superficie</span>
-                  <span class="font-mono font-bold text-emerald-400 text-xs">${areaTexto}</span>
-                </div>
-                <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-700/70">
-                  <span class="block text-[10px] text-slate-500 uppercase">Dimensiones</span>
-                  <span class="font-mono font-bold text-slate-200 text-xs">${dimTexto}</span>
-                </div>
-              </div>
-
-              <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1 gap-2">
-                <span class="truncate">📡 <strong class="font-mono text-amber-400">${macs}</strong></span>
-                <span class="shrink-0">Umbral: <strong class="text-slate-200">${p.umbral_humedad ?? 35}%</strong></span>
-              </div>
-            </div>
-          </div>
-
-          <div class="px-4 pb-4 pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onclick="verDetalleParcela(${p.id})"
-              class="flex-grow bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold py-2 px-3 rounded-xl transition shadow flex items-center justify-center gap-1.5"
-            >
-              <span>🔍 Ver más</span>
-            </button>
-
-            <a
-              href="/gestion-parcelas.html?editar=${p.id}"
-              title="Editar contorno y datos en Gestor de Parcelas"
-              class="bg-slate-900 hover:bg-amber-500/20 text-amber-300 border border-slate-700 text-xs font-semibold py-2 px-3 rounded-xl transition"
-            >
-              ✏️
-            </a>
-          </div>
-        </article>
-      `;
-    });
-
-    contenedor.innerHTML += `
-      <div class="bg-slate-800/45 border ${esCampoNombrado ? "border-amber-500/30" : "border-slate-700/80"} rounded-2xl p-4 md:p-5 space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700/80 pb-3">
-          <div class="flex items-center gap-2.5">
-            <span class="text-xl">${esCampoNombrado ? "🏡" : "🌱"}</span>
-            <div>
-              <h4 class="text-base font-extrabold ${esCampoNombrado ? "text-amber-300" : "text-slate-200"}">
-                ${tituloGrupo}
-              </h4>
-              <p class="text-[11px] text-slate-400">
-                ${listaGrupo.length} ${listaGrupo.length === 1 ? "parcela integrada" : "parcelas integradas"} • Superficie acumulada: <strong class="text-emerald-400 font-mono">${areaGrupoTxt}</strong>
-              </p>
-            </div>
-          </div>
-
-          <a
-            href="/gestion-parcelas.html"
-            class="text-[11px] bg-slate-900 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-semibold transition"
-          >
-            + Agregar parcela aquí
-          </a>
+      polyLayer.bindPopup(`
+        <div style="min-width:165px;">
+          ${cg ? `<div style="font-size:10px;color:#b45309;font-weight:700;">🏡 ${cg}</div>` : ""}
+          <div style="font-size:13px;font-weight:800;color:#0f172a;">#${p.id} ${nombre}</div>
+          <div style="font-size:11px;color:#334155;">🌱 ${cultivo} • ${Math.round(areaM2).toLocaleString()} m²</div>
+          <button onclick="verDetalleParcela(${p.id})" style="margin-top:6px;width:100%;background:#0284c7;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">
+            🔍 Ver ficha completa
+          </button>
         </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          ${tarjetasHtml}
-        </div>
-      </div>
-    `;
+      `);
+    } else if (
+      p.latitud !== null &&
+      p.longitud !== null &&
+      p.latitud !== "" &&
+      p.longitud !== "" &&
+      capaPoligonosGuardados
+    ) {
+      const pt = [parseFloat(p.latitud), parseFloat(p.longitud)];
+      todosLosPuntos.push(pt);
+      L.circleMarker(pt, {
+        radius: 8,
+        fillColor: "#00b4cc",
+        color: "#ffffff",
+        weight: 2,
+        fillOpacity: 0.9,
+      })
+        .addTo(capaPoligonosGuardados)
+        .bindPopup(
+          `<b>#${p.id} ${nombre}</b><br>Cultivo: ${cultivo}<br><a href="javascript:void(0)" onclick="verDetalleParcela(${p.id})">🔍 Ver más</a>`,
+        );
+    }
   });
 
   if (lblResumenArea) {
@@ -743,6 +810,156 @@ function renderizarVistaDeCampo() {
       maxZoom: 18,
     });
   }
+
+  if (parcelasCache.length === 0 && camposDisponibles.length === 0) {
+    contenedor.innerHTML = `
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center space-y-3">
+        <span class="text-4xl block">🌱</span>
+        <h4 class="text-base font-bold text-slate-200">No hay campos ni parcelas registradas</h4>
+        <p class="text-xs text-slate-400 max-w-md mx-auto">
+          Ve al <strong>Gestor de Parcelas</strong> para crear un campo o delimitar parcelas en el mapa.
+        </p>
+        <a href="/gestion-parcelas.html" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition">
+          🧭 Ir al Gestor de Parcelas
+        </a>
+      </div>
+    `;
+    return;
+  }
+
+  // 3. Botón desplegable inferior: Campos (arriba) y Parcelas sin campo (debajo)
+  const parcelasSinCampo = obtenerParcelasSinCampo();
+  const tieneParcelasSinCampo = parcelasSinCampo.length > 0;
+
+  let htmlDesplegable = `
+    <div class="bg-slate-800/70 border border-slate-700 rounded-2xl p-4 md:p-5 space-y-4">
+      <div class="relative inline-block">
+        <button
+          type="button"
+          onclick="alternarMenuOpcionesVisualizar()"
+          class="bg-slate-900 hover:bg-slate-700 text-slate-100 border border-slate-600 text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow"
+        >
+          <span>📂</span>
+          <span>${
+            seccionDesplegada === "CAMPOS"
+              ? `Visualizando: Campos${campoActivoDesplegado ? ` (${campoActivoDesplegado})` : ""}`
+              : seccionDesplegada === "PARCELAS"
+                ? "Visualizando: Parcelas (sin campo)"
+                : "Seleccionar visualización"
+          }</span>
+          <span>${menuOpcionesAbierto ? "▲" : "▼"}</span>
+        </button>
+
+        ${
+          menuOpcionesAbierto
+            ? `
+          <div class="mt-2 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-20">
+            <button
+              type="button"
+              onclick="seleccionarOpcionVisualizar('CAMPOS')"
+              class="w-full text-left px-4 py-3 text-xs font-bold flex items-center justify-between hover:bg-slate-800 transition ${
+                seccionDesplegada === "CAMPOS"
+                  ? "text-amber-300 bg-slate-800/80"
+                  : "text-slate-200"
+              }"
+            >
+              <span>🏡 Campos</span>
+              <span class="text-[11px] text-slate-400">${camposDisponibles.length}</span>
+            </button>
+            ${
+              tieneParcelasSinCampo
+                ? `
+              <button
+                type="button"
+                onclick="seleccionarOpcionVisualizar('PARCELAS')"
+                class="w-full text-left px-4 py-3 text-xs font-bold flex items-center justify-between border-t border-slate-800 hover:bg-slate-800 transition ${
+                  seccionDesplegada === "PARCELAS"
+                    ? "text-emerald-300 bg-slate-800/80"
+                    : "text-slate-200"
+                }"
+              >
+                <span>🌱 Parcelas</span>
+                <span class="text-[11px] text-slate-400">${parcelasSinCampo.length}</span>
+              </button>
+            `
+                : ""
+            }
+          </div>
+        `
+            : ""
+        }
+      </div>
+  `;
+
+  if (seccionDesplegada === "CAMPOS") {
+    const listaBotonesCampos = camposDisponibles
+      .map((nombreCampo) => {
+        const cant = parcelasCache.filter(
+          (p) =>
+            (p.campo_general || "").trim().toLowerCase() ===
+            nombreCampo.toLowerCase(),
+        ).length;
+        const activo =
+          campoActivoDesplegado &&
+          campoActivoDesplegado.toLowerCase() === nombreCampo.toLowerCase();
+        return `
+          <button
+            type="button"
+            onclick="seleccionarCampoDesplegado('${nombreCampo.replace(/'/g, "\\'")}')"
+            class="px-3.5 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-2 ${
+              activo
+                ? "bg-amber-500/20 text-amber-300 border-amber-400/60"
+                : "bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-700"
+            }"
+          >
+            <span>🏡 ${nombreCampo}</span>
+            <span class="text-[10px] opacity-80">(${cant})</span>
+          </button>
+        `;
+      })
+      .join("");
+
+    const campoSeleccionado =
+      campoActivoDesplegado || camposDisponibles[0] || "";
+    const parcelasDelCampo = parcelasCache.filter(
+      (p) =>
+        (p.campo_general || "").trim().toLowerCase() ===
+        campoSeleccionado.toLowerCase(),
+    );
+
+    const tarjetasCampoHtml =
+      parcelasDelCampo.length > 0
+        ? `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pt-2">
+            ${parcelasDelCampo.map((p) => construirTarjetaParcelaHtml(p, campoSeleccionado)).join("")}
+          </div>`
+        : `<div class="bg-slate-900/70 border border-slate-700/80 rounded-xl p-5 text-center text-xs text-slate-400">
+            El campo <strong>${campoSeleccionado}</strong> aún no tiene parcelas registradas.
+          </div>`;
+
+    htmlDesplegable += `
+      <div class="space-y-3 pt-2 border-t border-slate-700/70">
+        <div class="text-xs font-bold text-amber-300">Campos registrados:</div>
+        <div class="flex flex-wrap gap-2">
+          ${listaBotonesCampos || '<span class="text-xs text-slate-400">No hay campos creados.</span>'}
+        </div>
+        ${campoSeleccionado ? tarjetasCampoHtml : ""}
+      </div>
+    `;
+  } else if (seccionDesplegada === "PARCELAS" && tieneParcelasSinCampo) {
+    htmlDesplegable += `
+      <div class="space-y-3 pt-2 border-t border-slate-700/70">
+        <div class="text-xs font-bold text-emerald-300">
+          Parcelas registradas sin campo (${parcelasSinCampo.length}):
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pt-1">
+          ${parcelasSinCampo.map((p) => construirTarjetaParcelaHtml(p, "")).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  htmlDesplegable += `</div>`;
+  contenedor.innerHTML = htmlDesplegable;
 }
 
 // =========================================================================

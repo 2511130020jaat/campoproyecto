@@ -5,7 +5,15 @@ let capaCalle = null;
 let esSatelite = true;
 let capaParcelasReferencia = null;
 let parcelasCache = [];
+let camposCache = [];
 let boundsGuardados = [];
+
+// Contornos punteados reales de los Campos registrados (terreno general)
+let contornosCamposGuardados = []; // [{ id, nombre, poligono }]
+
+// Modo de registro activo: "PARCELA" o "CAMPO"
+let modoRegistro = "PARCELA";
+let ultimoCampoCreado = null;
 
 // Variables de dibujo activo
 let modoMapa = "POLIGONO";
@@ -18,8 +26,53 @@ const COORD_DEFECTO = [-12.6581, -76.6321];
 
 document.addEventListener("DOMContentLoaded", () => {
   inicializarMapaGestion();
+  activarModoRegistro("PARCELA");
   cargarParcelasGestion();
 });
+
+function normalizarTexto(valor) {
+  return String(valor || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function claveStorageCampos() {
+  const uid =
+    typeof usuarioSesion !== "undefined" && usuarioSesion?.id
+      ? usuarioSesion.id
+      : "default";
+  return `asir_contornos_campos_${uid}`;
+}
+
+function leerContornosCamposLocal() {
+  try {
+    const raw = localStorage.getItem(claveStorageCampos());
+    const arr = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(
+      (item) =>
+        item &&
+        typeof item.nombre === "string" &&
+        item.nombre.trim() !== "" &&
+        Array.isArray(item.poligono) &&
+        item.poligono.length >= 3,
+    );
+  } catch (e) {
+    return [];
+  }
+}
+
+function guardarContornosCamposLocal() {
+  try {
+    localStorage.setItem(
+      claveStorageCampos(),
+      JSON.stringify(contornosCamposGuardados),
+    );
+  } catch (e) {
+    console.warn("No se pudo guardar contornos de campos en localStorage:", e);
+  }
+}
 
 // =========================================================================
 // 1. MAPA SATELITAL DE EDICIÓN Y CAPAS DE REFERENCIA
@@ -97,21 +150,28 @@ function cambiarModoMapa(nuevoModo) {
   const btnPol = document.getElementById("btnModoPoligono");
   const btnPto = document.getElementById("btnModoPunto");
   const estado = document.getElementById("estadoEditorMapa");
+  const esCampo = modoRegistro === "CAMPO";
+
+  const estiloInactivo =
+    "bg-slate-900/70 hover:bg-slate-700/70 text-slate-300 hover:text-white border border-slate-700/80 text-xs px-3 py-1.5 rounded-lg font-normal transition inline-flex items-center gap-1.5";
 
   if (nuevoModo === "POLIGONO") {
-    btnPol.className =
-      "bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition shadow";
-    btnPto.className =
-      "bg-slate-900 text-slate-300 hover:text-white border border-slate-700 text-xs px-3 py-1.5 rounded-lg font-semibold transition";
+    btnPol.className = esCampo
+      ? "bg-rose-600/90 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition inline-flex items-center gap-1.5"
+      : "bg-emerald-600/90 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition inline-flex items-center gap-1.5";
+    btnPto.className = estiloInactivo;
     if (estado) {
-      estado.innerText = "Modo: Trazado de contorno activo";
-      estado.className = "text-xs font-semibold text-emerald-400";
+      estado.innerText = esCampo
+        ? "Modo: Trazado de perímetro de Campo (rojizo)"
+        : "Modo: Trazado de contorno activo";
+      estado.className = esCampo
+        ? "text-xs font-semibold text-rose-400"
+        : "text-xs font-semibold text-emerald-400";
     }
   } else {
     btnPto.className =
-      "bg-sky-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition shadow";
-    btnPol.className =
-      "bg-slate-900 text-slate-300 hover:text-white border border-slate-700 text-xs px-3 py-1.5 rounded-lg font-semibold transition";
+      "bg-sky-600/90 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition inline-flex items-center gap-1.5";
+    btnPol.className = estiloInactivo;
     if (estado) {
       estado.innerText = "Modo: Marcador GPS puntual";
       estado.className = "text-xs font-semibold text-sky-400";
@@ -136,7 +196,129 @@ function limpiarPoligonoActual() {
 }
 
 // =========================================================================
-// 2. CÁLCULOS GEOMÉTRICOS DE ÁREA, PERÍMETRO Y ENVOLTURA
+// 2. CAMBIO DE MODO: REGISTRAR CAMPO vs. REGISTRAR PARCELA
+// =========================================================================
+
+function activarModoRegistro(nuevoModo, campoPreseleccionado = null) {
+  modoRegistro = nuevoModo === "CAMPO" ? "CAMPO" : "PARCELA";
+
+  if (modoRegistro === "CAMPO") {
+    document.getElementById("editParcelaId").value = "";
+    document.getElementById("btnCancelarEdicion").classList.add("hidden");
+  }
+
+  const tabCampo = document.getElementById("tabModoCampo");
+  const tabParcela = document.getElementById("tabModoParcela");
+  const grupoCampo = document.getElementById("grupoCamposModoCampo");
+  const grupoParcela = document.getElementById("grupoCamposModoParcela");
+  const formTitulo = document.getElementById("formTitulo");
+  const formSubtitulo = document.getElementById("formSubtitulo");
+  const btnGuardar = document.getElementById("btnGuardarParcela");
+  const inputNombreParcela = document.getElementById("txtNombreParcela");
+  const inputNombreCampo = document.getElementById("txtNombreCampoNuevo");
+  const notaSensores = document.getElementById("notaSensoresDiseno");
+
+  if (modoRegistro === "CAMPO") {
+    tabCampo.className =
+      "bg-rose-600 hover:bg-rose-500 border border-rose-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-2 shadow";
+    tabParcela.className =
+      "bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-2";
+
+    grupoCampo.classList.remove("hidden");
+    grupoParcela.classList.add("hidden");
+
+    if (inputNombreParcela) inputNombreParcela.required = false;
+    if (inputNombreCampo) inputNombreCampo.required = true;
+
+    formTitulo.innerHTML = "<span>🏡</span> Registrar Nuevo Campo / Fundo";
+    formSubtitulo.innerText =
+      "Traza el perímetro general del campo en tono rojizo; al guardarlo se marcará con línea punteada y podrás registrar sus parcelas";
+    btnGuardar.innerText = "🏡 Guardar Campo";
+    btnGuardar.className =
+      "flex-grow bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg";
+
+    if (notaSensores) {
+      notaSensores.innerHTML =
+        "ℹ️ En un <strong class='text-rose-300'>Campo</strong> no se asignan sensores ni cultivos generales; al guardarlo podrás crear sus parcelas y luego configurar nodos en <strong class='text-sky-400'>Diseñador 2D e IO</strong>.";
+    }
+  } else {
+    tabParcela.className =
+      "bg-sky-600 hover:bg-sky-500 border border-sky-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-2 shadow";
+    tabCampo.className =
+      "bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-2";
+
+    grupoCampo.classList.add("hidden");
+    grupoParcela.classList.remove("hidden");
+
+    if (inputNombreCampo) inputNombreCampo.required = false;
+    if (inputNombreParcela) inputNombreParcela.required = true;
+
+    const esEdicion = document.getElementById("editParcelaId").value !== "";
+    formTitulo.innerHTML = esEdicion
+      ? `<span>✏️</span> Editando Parcela #${document.getElementById("editParcelaId").value}`
+      : "<span>➕</span> Registrar Nueva Parcela";
+    formSubtitulo.innerText = campoPreseleccionado
+      ? `Registrando parcela dentro del campo "${campoPreseleccionado.nombre}"`
+      : "Registra una parcela independiente o dentro de un campo ya marcado";
+    btnGuardar.innerText = esEdicion
+      ? "💾 Actualizar Parcela"
+      : "💾 Guardar Parcela";
+    btnGuardar.className = esEdicion
+      ? "flex-grow bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg"
+      : "flex-grow bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg";
+
+    if (notaSensores) {
+      notaSensores.innerHTML =
+        "📡 Los sensores ESP32 y nodos se configuran en <strong class='text-sky-400'>Diseñador 2D e IO</strong> una vez definidas las parcelas.";
+    }
+
+    if (campoPreseleccionado) {
+      const selCampo = document.getElementById("selCampoGeneral");
+      const txtCampo = document.getElementById("txtCampoGeneral");
+      if (selCampo) {
+        const val = campoPreseleccionado.id
+          ? String(campoPreseleccionado.id)
+          : `__NOMBRE__:${campoPreseleccionado.nombre}`;
+        if (Array.from(selCampo.options).some((o) => o.value === val)) {
+          selCampo.value = val;
+        }
+      }
+      if (txtCampo) {
+        txtCampo.value = campoPreseleccionado.nombre || "";
+      }
+    }
+  }
+
+  cambiarModoMapa(modoMapa);
+  redibujarPoligonoActivo();
+}
+
+function iniciarParcelaEnUltimoCampo() {
+  if (!ultimoCampoCreado) return;
+  limpiarPoligonoActual();
+  if (marcadorSeleccion && mapaGestion) {
+    mapaGestion.removeLayer(marcadorSeleccion);
+    marcadorSeleccion = null;
+  }
+  document.getElementById("txtNombreParcela").value = "";
+  document.getElementById("txtCultivo").value = "";
+  document.getElementById("txtLatitud").value = "";
+  document.getElementById("txtLongitud").value = "";
+
+  activarModoRegistro("PARCELA", ultimoCampoCreado);
+
+  const formEl = document.getElementById("formGestionParcela");
+  if (formEl) {
+    formEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  const inputNombre = document.getElementById("txtNombreParcela");
+  if (inputNombre) {
+    setTimeout(() => inputNombre.focus(), 150);
+  }
+}
+
+// =========================================================================
+// 3. CÁLCULOS GEOMÉTRICOS DE ÁREA Y PERÍMETRO
 // =========================================================================
 
 function parsearPoligonoGuardado(raw) {
@@ -243,66 +425,8 @@ function calcularMetricasPoligono(puntos) {
   };
 }
 
-function calcularEnvolturaConvexa(puntos) {
-  if (!Array.isArray(puntos) || puntos.length < 3) return [];
-
-  const unicos = [];
-  const vistos = new Set();
-  puntos.forEach(([lat, lng]) => {
-    const key = `${lat.toFixed(7)},${lng.toFixed(7)}`;
-    if (!vistos.has(key)) {
-      vistos.add(key);
-      unicos.push([lat, lng]);
-    }
-  });
-
-  if (unicos.length < 3) return [];
-  unicos.sort((a, b) => (a[1] === b[1] ? a[0] - b[0] : a[1] - b[1]));
-
-  const cruz = (o, a, b) =>
-    (a[1] - o[1]) * (b[0] - o[0]) - (a[0] - o[0]) * (b[1] - o[1]);
-
-  const inferior = [];
-  for (const p of unicos) {
-    while (
-      inferior.length >= 2 &&
-      cruz(inferior[inferior.length - 2], inferior[inferior.length - 1], p) <= 0
-    ) {
-      inferior.pop();
-    }
-    inferior.push(p);
-  }
-
-  const superior = [];
-  for (let i = unicos.length - 1; i >= 0; i--) {
-    const p = unicos[i];
-    while (
-      superior.length >= 2 &&
-      cruz(superior[superior.length - 2], superior[superior.length - 1], p) <= 0
-    ) {
-      superior.pop();
-    }
-    superior.push(p);
-  }
-
-  inferior.pop();
-  superior.pop();
-  const hull = inferior.concat(superior);
-  if (hull.length < 3) return [];
-
-  const cLat = hull.reduce((acc, p) => acc + p[0], 0) / hull.length;
-  const cLng = hull.reduce((acc, p) => acc + p[1], 0) / hull.length;
-
-  return hull.map(([lat, lng]) => {
-    const dLat = lat - cLat;
-    const dLng = lng - cLng;
-    const dist = Math.hypot(dLat, dLng) || 1e-6;
-    const margen = 0.000045;
-    return [lat + (dLat / dist) * margen, lng + (dLng / dist) * margen];
-  });
-}
-
 function redibujarPoligonoActivo() {
+  if (!mapaGestion) return;
   marcadoresVertices.forEach((m) => mapaGestion.removeLayer(m));
   marcadoresVertices = [];
 
@@ -311,10 +435,13 @@ function redibujarPoligonoActivo() {
     poligonoActivoLayer = null;
   }
 
+  const esCampo = modoRegistro === "CAMPO";
+  const colorPunto = esCampo ? "#ef4444" : "#10b981";
+
   verticesActivos.forEach((coord, idx) => {
     const iconoVertice = L.divIcon({
       className: "",
-      html: '<div style="width:14px;height:14px;background:#10b981;border:2px solid #ffffff;border-radius:50%;box-shadow:0 0 6px #000;cursor:move;"></div>',
+      html: `<div style="width:14px;height:14px;background:${colorPunto};border:2px solid #ffffff;border-radius:50%;box-shadow:0 0 6px #000;cursor:move;"></div>`,
       iconSize: [14, 14],
       iconAnchor: [7, 7],
     });
@@ -337,22 +464,25 @@ function redibujarPoligonoActivo() {
 }
 
 function actualizarFormaYMetricas() {
-  if (poligonoActivoLayer) {
+  if (poligonoActivoLayer && mapaGestion) {
     mapaGestion.removeLayer(poligonoActivoLayer);
     poligonoActivoLayer = null;
   }
 
-  if (verticesActivos.length >= 2) {
+  const esCampo = modoRegistro === "CAMPO";
+  const colorTrazo = esCampo ? "#ef4444" : "#10b981";
+
+  if (verticesActivos.length >= 2 && mapaGestion) {
     poligonoActivoLayer =
       verticesActivos.length >= 3
         ? L.polygon(verticesActivos, {
-            color: "#10b981",
+            color: colorTrazo,
             weight: 3,
-            fillColor: "#10b981",
-            fillOpacity: 0.3,
+            fillColor: colorTrazo,
+            fillOpacity: esCampo ? 0.18 : 0.3,
           }).addTo(mapaGestion)
         : L.polyline(verticesActivos, {
-            color: "#10b981",
+            color: colorTrazo,
             weight: 3,
             dashArray: "6,6",
           }).addTo(mapaGestion);
@@ -392,7 +522,7 @@ function fijarPuntoSeleccionado(lat, lng, centrarMapa) {
   if (!marcadorSeleccion) {
     marcadorSeleccion = L.marker([lat, lng], { draggable: true })
       .addTo(mapaGestion)
-      .bindPopup("📍 Centro de parcela");
+      .bindPopup("📍 Coordenada seleccionada");
 
     marcadorSeleccion.on("dragend", (ev) => {
       const pos = ev.target.getLatLng();
@@ -425,64 +555,202 @@ function actualizarMarcadorDesdeInputs() {
 }
 
 // =========================================================================
-// 3. CARGA DE PARCELAS, AUTOCOMPLETADO DE CAMPOS Y TABLA ADMINISTRATIVA
+// 4. CARGA DE CAMPOS/PARCELAS Y COHERENCIA ENTRE MAPA Y SELECTORES
 // =========================================================================
 
 async function cargarParcelasGestion() {
   if (typeof usuarioSesion === "undefined" || !usuarioSesion) return;
 
+  contornosCamposGuardados = leerContornosCamposLocal();
+
   try {
-    const res = await fetch("/api/parcelas?id_usuario=" + usuarioSesion.id);
-    const data = await res.json();
-    parcelasCache = Array.isArray(data) ? data : [];
+    const [resParcelas, resCampos] = await Promise.all([
+      fetch("/api/parcelas?id_usuario=" + usuarioSesion.id),
+      fetch("/api/campos?id_usuario=" + usuarioSesion.id),
+    ]);
+
+    const dataParcelas = await resParcelas.json();
+    parcelasCache = Array.isArray(dataParcelas) ? dataParcelas : [];
+
+    if (resCampos.ok) {
+      const dataCampos = await resCampos.json();
+      camposCache = Array.isArray(dataCampos) ? dataCampos : [];
+
+      const nombresBd = new Set(
+        camposCache.map((c) => normalizarTexto(c.nombre)),
+      );
+      const idsBd = new Set(
+        camposCache.filter((c) => c.id != null).map((c) => String(c.id)),
+      );
+
+      contornosCamposGuardados = contornosCamposGuardados.filter((item) => {
+        const porId = item.id != null && idsBd.has(String(item.id));
+        const porNombre = nombresBd.has(normalizarTexto(item.nombre));
+        return porId || porNombre;
+      });
+
+      camposCache.forEach((c) => {
+        const pol = parsearPoligonoGuardado(c.poligono_json);
+        if (pol.length >= 3) {
+          const nombreLimpio = (c.nombre || "").trim().replace(/\s+/g, " ");
+          const idx = contornosCamposGuardados.findIndex(
+            (item) =>
+              (c.id && String(item.id) === String(c.id)) ||
+              normalizarTexto(item.nombre) === normalizarTexto(nombreLimpio),
+          );
+          const entrada = {
+            id: c.id || null,
+            nombre: nombreLimpio,
+            poligono: pol,
+          };
+          if (idx >= 0) contornosCamposGuardados[idx] = entrada;
+          else contornosCamposGuardados.push(entrada);
+        }
+      });
+
+      guardarContornosCamposLocal();
+    }
 
     actualizarListasCamposGenerales();
     dibujarParcelasReferenciaEnMapa();
     renderizarTablaGestion();
 
-    // Si venimos desde "Vista de Campo" con ?editar=<id>, abrir edición directo
     const params = new URLSearchParams(window.location.search);
     const idEditarUrl = params.get("editar");
     if (idEditarUrl && !document.getElementById("editParcelaId").value) {
+      activarModoRegistro("PARCELA");
       editarParcela(idEditarUrl);
     }
   } catch (err) {
-    console.error("Error cargando parcelas en gestor:", err);
+    console.error("Error cargando parcelas y campos en gestor:", err);
   }
 }
 
-function actualizarListasCamposGenerales() {
-  const datalist = document.getElementById("datalistCamposGenerales");
-  const selFiltro = document.getElementById("selFiltroCampoGestion");
+function obtenerCamposConsolidados() {
+  const mapaCampos = new Map();
 
-  const camposSet = new Set();
-  parcelasCache.forEach((p) => {
-    const cg = (p.campo_general || "").trim();
-    if (cg) camposSet.add(cg);
+  camposCache.forEach((c) => {
+    const nombre = (c.nombre || "").trim().replace(/\s+/g, " ");
+    if (!nombre) return;
+    const clave = normalizarTexto(nombre);
+    mapaCampos.set(clave, {
+      id: c.id,
+      nombre,
+      total_parcelas: Number(c.total_parcelas || 0),
+    });
   });
 
-  const camposOrdenados = Array.from(camposSet).sort((a, b) =>
-    a.localeCompare(b),
-  );
+  parcelasCache.forEach((p) => {
+    const nombre = (p.campo_general || "").trim().replace(/\s+/g, " ");
+    if (!nombre) return;
+    const clave = normalizarTexto(nombre);
+    if (!mapaCampos.has(clave)) {
+      mapaCampos.set(clave, {
+        id: p.id_campo || null,
+        nombre,
+        total_parcelas: 0,
+      });
+    } else if (!mapaCampos.get(clave).id && p.id_campo) {
+      mapaCampos.get(clave).id = p.id_campo;
+    }
+  });
 
-  if (datalist) {
-    datalist.innerHTML = camposOrdenados
-      .map((cg) => `<option value="${cg}"></option>`)
-      .join("");
+  return Array.from(mapaCampos.values()).sort((a, b) =>
+    a.nombre.localeCompare(b.nombre),
+  );
+}
+
+function actualizarListasCamposGenerales() {
+  const selCampo = document.getElementById("selCampoGeneral");
+  const selFiltro = document.getElementById("selFiltroCampoGestion");
+  const txtCampo = document.getElementById("txtCampoGeneral");
+
+  const camposOrdenados = obtenerCamposConsolidados();
+
+  if (selCampo) {
+    const previoCampoId = selCampo.value;
+    selCampo.innerHTML =
+      '<option value="">-- Parcela independiente / Sin campo --</option>';
+    camposOrdenados.forEach((c) => {
+      const val = c.id ? String(c.id) : `__NOMBRE__:${c.nombre}`;
+      const sufijo =
+        c.total_parcelas > 0
+          ? ` (${c.total_parcelas} parcelas)`
+          : " (0 parcelas)";
+      selCampo.innerHTML += `<option value="${val}">🏡 ${c.nombre}${sufijo}</option>`;
+    });
+
+    if (
+      previoCampoId &&
+      Array.from(selCampo.options).some((o) => o.value === previoCampoId)
+    ) {
+      selCampo.value = previoCampoId;
+    } else if (txtCampo && txtCampo.value.trim()) {
+      sincronizarSelectDesdeTextoCampo();
+    }
   }
 
   if (selFiltro) {
     const previo = selFiltro.value || "TODOS";
     selFiltro.innerHTML = '<option value="TODOS">Todos los campos</option>';
-    camposOrdenados.forEach((cg) => {
-      selFiltro.innerHTML += `<option value="${cg}">🏡 ${cg}</option>`;
+    camposOrdenados.forEach((c) => {
+      selFiltro.innerHTML += `<option value="${c.nombre}">🏡 ${c.nombre}</option>`;
     });
     selFiltro.innerHTML +=
-      '<option value="__SIN_CAMPO__">🌱 Sin Campo General</option>';
+      '<option value="__SIN_CAMPO__">🌱 Parcelas independientes</option>';
 
     if (Array.from(selFiltro.options).some((o) => o.value === previo)) {
       selFiltro.value = previo;
+    } else {
+      selFiltro.value = "TODOS";
     }
+  }
+}
+
+function sincronizarCampoDesdeSelect() {
+  const selCampo = document.getElementById("selCampoGeneral");
+  const txtCampo = document.getElementById("txtCampoGeneral");
+  if (!selCampo || !txtCampo) return;
+
+  const val = selCampo.value;
+  if (!val) {
+    txtCampo.value = "";
+    return;
+  }
+
+  if (val.startsWith("__NOMBRE__:")) {
+    txtCampo.value = val.replace("__NOMBRE__:", "");
+    return;
+  }
+
+  const encontrado = obtenerCamposConsolidados().find(
+    (c) => String(c.id) === String(val),
+  );
+  if (encontrado) {
+    txtCampo.value = encontrado.nombre;
+  }
+}
+
+function sincronizarSelectDesdeTextoCampo() {
+  const selCampo = document.getElementById("selCampoGeneral");
+  const txtCampo = document.getElementById("txtCampoGeneral");
+  if (!selCampo || !txtCampo) return;
+
+  const texto = normalizarTexto(txtCampo.value);
+  if (!texto) {
+    selCampo.value = "";
+    return;
+  }
+
+  const encontrado = obtenerCamposConsolidados().find(
+    (c) => normalizarTexto(c.nombre) === texto,
+  );
+  if (encontrado) {
+    selCampo.value = encontrado.id
+      ? String(encontrado.id)
+      : `__NOMBRE__:${encontrado.nombre}`;
+  } else {
+    selCampo.value = "";
   }
 }
 
@@ -492,7 +760,20 @@ function dibujarParcelasReferenciaEnMapa() {
   boundsGuardados = [];
 
   const idEnEdicion = document.getElementById("editParcelaId").value;
-  const gruposPuntos = new Map();
+
+  contornosCamposGuardados.forEach((campo) => {
+    if (Array.isArray(campo.poligono) && campo.poligono.length >= 3) {
+      campo.poligono.forEach((pt) => boundsGuardados.push(pt));
+      L.polygon(campo.poligono, {
+        color: "#ef4444",
+        weight: 2,
+        dashArray: "6, 6",
+        fillColor: "#ef4444",
+        fillOpacity: 0.03,
+        interactive: false,
+      }).addTo(capaParcelasReferencia);
+    }
+  });
 
   parcelasCache.forEach((p) => {
     const nombre = p.parcela || p.nombre || "Parcela #" + p.id;
@@ -502,13 +783,7 @@ function dibujarParcelasReferenciaEnMapa() {
     const esLaQueEdito = String(p.id) === String(idEnEdicion);
 
     if (pol.length >= 3) {
-      pol.forEach((pt) => {
-        boundsGuardados.push(pt);
-        if (cg) {
-          if (!gruposPuntos.has(cg)) gruposPuntos.set(cg, []);
-          gruposPuntos.get(cg).push(pt);
-        }
-      });
+      pol.forEach((pt) => boundsGuardados.push(pt));
 
       if (!esLaQueEdito) {
         const poly = L.polygon(pol, {
@@ -537,10 +812,6 @@ function dibujarParcelasReferenciaEnMapa() {
     ) {
       const pt = [parseFloat(p.latitud), parseFloat(p.longitud)];
       boundsGuardados.push(pt);
-      if (cg) {
-        if (!gruposPuntos.has(cg)) gruposPuntos.set(cg, []);
-        gruposPuntos.get(cg).push(pt);
-      }
 
       if (!esLaQueEdito) {
         L.circleMarker(pt, {
@@ -558,22 +829,6 @@ function dibujarParcelasReferenciaEnMapa() {
     }
   });
 
-  // Dibujar envoltura no-interactiva de cada Campo General para referencia visual
-  gruposPuntos.forEach((pts) => {
-    if (pts.length >= 3) {
-      const hull = calcularEnvolturaConvexa(pts);
-      if (hull.length >= 3) {
-        L.polygon(hull, {
-          color: "#f59e0b",
-          weight: 2,
-          dashArray: "7, 6",
-          fillOpacity: 0.03,
-          interactive: false,
-        }).addTo(capaParcelasReferencia);
-      }
-    }
-  });
-
   if (boundsGuardados.length > 0 && mapaGestion && !idEnEdicion) {
     mapaGestion.fitBounds(boundsGuardados, { padding: [45, 45], maxZoom: 18 });
   }
@@ -582,11 +837,9 @@ function dibujarParcelasReferenciaEnMapa() {
 function renderizarTablaGestion() {
   const tbody = document.getElementById("tablaGestionParcelas");
   const contador = document.getElementById("contadorGestionParcelas");
-  const textoBusqueda = (
-    document.getElementById("txtBuscarParcela")?.value || ""
-  )
-    .toLowerCase()
-    .trim();
+  const textoBusqueda = normalizarTexto(
+    document.getElementById("txtBuscarParcela")?.value || "",
+  );
   const filtroCampo =
     document.getElementById("selFiltroCampoGestion")?.value || "TODOS";
 
@@ -604,14 +857,12 @@ function renderizarTablaGestion() {
     }
 
     if (!textoBusqueda) return true;
-    const nombre = (p.parcela || p.nombre || "").toLowerCase();
-    const cultivo = (p.cultivo || "").toLowerCase();
-    const macs = (p.lista_macs || p.codigo_mac || "").toLowerCase();
+    const nombre = normalizarTexto(p.parcela || p.nombre || "");
+    const cultivo = normalizarTexto(p.cultivo || "");
     return (
       nombre.includes(textoBusqueda) ||
       cultivo.includes(textoBusqueda) ||
-      macs.includes(textoBusqueda) ||
-      cg.toLowerCase().includes(textoBusqueda) ||
+      normalizarTexto(cg).includes(textoBusqueda) ||
       String(p.id).includes(textoBusqueda)
     );
   });
@@ -624,7 +875,7 @@ function renderizarTablaGestion() {
   if (filtradas.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="p-6 text-center text-slate-500 text-xs">
+        <td colspan="6" class="p-6 text-center text-slate-500 text-xs">
           No hay parcelas que coincidan con el filtro actual.
         </td>
       </tr>
@@ -637,7 +888,6 @@ function renderizarTablaGestion() {
     const nombre = p.parcela || p.nombre || "Parcela #" + p.id;
     const cultivo = p.cultivo || "General";
     const cg = (p.campo_general || "").trim();
-    const macs = p.lista_macs || p.codigo_mac || "Sin sensor";
     const pol = parsearPoligonoGuardado(p.poligono_json);
     const met = calcularMetricasPoligono(pol);
 
@@ -664,7 +914,7 @@ function renderizarTablaGestion() {
         <td class="p-3.5">
           ${
             cg
-              ? `<span class="inline-flex items-center gap-1 bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-lg font-semibold text-[11px]">🏡 ${cg}</span>`
+              ? `<span class="inline-flex items-center gap-1 bg-rose-500/15 text-rose-300 border border-rose-500/30 px-2.5 py-0.5 rounded-lg font-semibold text-[11px]">🏡 ${cg}</span>`
               : '<span class="text-slate-500 italic">Independiente</span>'
           }
         </td>
@@ -676,7 +926,6 @@ function renderizarTablaGestion() {
           <div class="font-mono font-bold text-emerald-400">${areaTxt}</div>
           <div class="text-[11px] text-slate-400">${pol.length >= 3 ? `${pol.length} vértices GPS` : "Sin polígono"}</div>
         </td>
-        <td class="p-3.5 font-mono text-amber-400">${macs}</td>
         <td class="p-3.5">${badgeModo}</td>
         <td class="p-3.5 text-right space-x-1.5 whitespace-nowrap">
           <button
@@ -727,15 +976,46 @@ function enfocarParcelaEnMapa(id) {
 }
 
 // =========================================================================
-// 4. CREACIÓN, EDICIÓN Y ELIMINACIÓN DE PARCELAS
+// 5. VALIDACIÓN DE NOMBRES, GUARDADO, EDICIÓN Y ELIMINACIÓN
 // =========================================================================
 
-function prepararNuevaParcela() {
-  cancelarEdicion();
-  const sec = document.getElementById("seccionFormularioParcela");
-  if (sec) sec.scrollIntoView({ behavior: "smooth", block: "start" });
-  const inputNombre = document.getElementById("txtNombreParcela");
-  if (inputNombre) inputNombre.focus();
+function existeCampoDuplicado(nombreCampo) {
+  const clave = normalizarTexto(nombreCampo);
+  return obtenerCamposConsolidados().some(
+    (c) => normalizarTexto(c.nombre) === clave,
+  );
+}
+
+function existeParcelaDuplicadaEnMismoAmbito({
+  nombreParcela,
+  idCampo,
+  nombreCampo,
+  idExcluir = "",
+}) {
+  const claveNombre = normalizarTexto(nombreParcela);
+  const claveCampo = normalizarTexto(nombreCampo);
+  const tieneCampo = Boolean(claveCampo || idCampo != null);
+
+  return parcelasCache.some((p) => {
+    if (idExcluir && String(p.id) === String(idExcluir)) return false;
+    if (normalizarTexto(p.parcela || p.nombre || "") !== claveNombre) {
+      return false;
+    }
+
+    const pCampo = normalizarTexto(p.campo_general || "");
+    const pTieneCampo = Boolean(pCampo || p.id_campo != null);
+
+    if (!tieneCampo) {
+      return !pTieneCampo;
+    }
+
+    if (!pTieneCampo) return false;
+
+    if (idCampo != null && p.id_campo != null) {
+      return String(idCampo) === String(p.id_campo);
+    }
+    return claveCampo !== "" && pCampo === claveCampo;
+  });
 }
 
 function editarParcela(id) {
@@ -744,23 +1024,25 @@ function editarParcela(id) {
 
   document.getElementById("editParcelaId").value = p.id;
   document.getElementById("txtCampoGeneral").value = p.campo_general || "";
+  sincronizarSelectDesdeTextoCampo();
+  if (p.id_campo && document.getElementById("selCampoGeneral")) {
+    const optExiste = Array.from(
+      document.getElementById("selCampoGeneral").options,
+    ).some((o) => o.value === String(p.id_campo));
+    if (optExiste) {
+      document.getElementById("selCampoGeneral").value = String(p.id_campo);
+    }
+  }
+
   document.getElementById("txtNombreParcela").value =
     p.parcela || p.nombre || "";
   document.getElementById("txtCultivo").value = p.cultivo || "";
   document.getElementById("txtLatitud").value = p.latitud ?? "";
   document.getElementById("txtLongitud").value = p.longitud ?? "";
-  document.getElementById("txtMacESP32").value = p.codigo_mac || "";
-
-  document.getElementById("formTitulo").innerHTML =
-    "<span>✏️</span> Editando Parcela #" + p.id;
-  const btnGuardar = document.getElementById("btnGuardarParcela");
-  btnGuardar.innerText = "💾 Actualizar Parcela";
-  btnGuardar.className =
-    "flex-grow bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg";
 
   document.getElementById("btnCancelarEdicion").classList.remove("hidden");
+  activarModoRegistro("PARCELA");
 
-  // Redibujar referencias ocultando el polígono azul estático de esta parcela
   dibujarParcelasReferenciaEnMapa();
 
   const poligono = parsearPoligonoGuardado(p.poligono_json);
@@ -799,15 +1081,10 @@ function editarParcela(id) {
 function cancelarEdicion() {
   document.getElementById("editParcelaId").value = "";
   document.getElementById("formGestionParcela").reset();
+  if (document.getElementById("selCampoGeneral")) {
+    document.getElementById("selCampoGeneral").value = "";
+  }
   limpiarPoligonoActual();
-
-  document.getElementById("formTitulo").innerHTML =
-    "<span>➕</span> Registrar Nueva Parcela";
-  const btnGuardar = document.getElementById("btnGuardarParcela");
-  btnGuardar.innerText = "💾 Guardar Parcela";
-  btnGuardar.className =
-    "flex-grow bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg";
-
   document.getElementById("btnCancelarEdicion").classList.add("hidden");
 
   if (marcadorSeleccion && mapaGestion) {
@@ -815,28 +1092,155 @@ function cancelarEdicion() {
     marcadorSeleccion = null;
   }
 
-  // Limpiar parámetro ?editar= de la URL si existía
   if (window.location.search.includes("editar=")) {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
+  activarModoRegistro("PARCELA");
   dibujarParcelasReferenciaEnMapa();
 }
 
-async function guardarParcela(e) {
+async function guardarRegistroActual(e) {
   e.preventDefault();
-
-  const idEdicion = document.getElementById("editParcelaId").value;
-  const campo_general = document.getElementById("txtCampoGeneral").value.trim();
-  const nombre = document.getElementById("txtNombreParcela").value.trim();
-  const cultivo = document.getElementById("txtCultivo").value.trim();
-  const latitud = document.getElementById("txtLatitud").value;
-  const longitud = document.getElementById("txtLongitud").value;
-  const codigo_mac = document.getElementById("txtMacESP32").value.trim();
 
   if (verticesActivos.length > 0 && verticesActivos.length < 3) {
     alert(
-      "Has marcado menos de 3 vértices. Agrega al menos 3 esquinas para cerrar el polígono o presiona 'Limpiar Borde' para guardar solo punto GPS.",
+      "Has marcado menos de 3 vértices. Agrega al menos 3 esquinas para cerrar el contorno o presiona 'Limpiar Borde'.",
+    );
+    return;
+  }
+
+  if (modoRegistro === "CAMPO") {
+    await guardarCampoDesdeFormulario();
+  } else {
+    await guardarParcelaDesdeFormulario();
+  }
+}
+
+async function guardarCampoDesdeFormulario() {
+  if (typeof usuarioSesion === "undefined" || !usuarioSesion) return;
+
+  const nombreCampo = document
+    .getElementById("txtNombreCampoNuevo")
+    .value.trim()
+    .replace(/\s+/g, " ");
+  const ubicacionRef = document
+    .getElementById("txtUbicacionCampo")
+    .value.trim();
+
+  if (!nombreCampo) {
+    alert("Ingresa el nombre del Campo / Fundo.");
+    return;
+  }
+
+  if (existeCampoDuplicado(nombreCampo)) {
+    alert(`Ya existe un campo registrado con el nombre "${nombreCampo}".`);
+    return;
+  }
+
+  const poligonoCampo =
+    verticesActivos.length >= 3 ? verticesActivos.map((pt) => [...pt]) : null;
+
+  try {
+    const res = await fetch("/api/campos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id_usuario: usuarioSesion.id,
+        nombre: nombreCampo,
+        ubicacion_ref: ubicacionRef || null,
+        poligono: poligonoCampo,
+        area_m2: areaCalculadaM2 > 0 ? areaCalculadaM2.toFixed(2) : null,
+      }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert("❌ Error: " + (data.error || "No se pudo registrar el campo."));
+      return;
+    }
+
+    const campoGuardado = data.campo || {
+      id: null,
+      nombre: nombreCampo,
+    };
+    ultimoCampoCreado = campoGuardado;
+
+    if (poligonoCampo) {
+      const nombreLimpio = (campoGuardado.nombre || nombreCampo)
+        .trim()
+        .replace(/\s+/g, " ");
+      const idx = contornosCamposGuardados.findIndex(
+        (item) =>
+          (campoGuardado.id && String(item.id) === String(campoGuardado.id)) ||
+          normalizarTexto(item.nombre) === normalizarTexto(nombreLimpio),
+      );
+      const entrada = {
+        id: campoGuardado.id || null,
+        nombre: nombreLimpio,
+        poligono: poligonoCampo,
+      };
+      if (idx >= 0) contornosCamposGuardados[idx] = entrada;
+      else contornosCamposGuardados.push(entrada);
+      guardarContornosCamposLocal();
+    }
+
+    const banner = document.getElementById("bannerCampoCreado");
+    const textoBanner = document.getElementById("textoBannerCampo");
+    if (banner && textoBanner) {
+      textoBanner.innerText = `Campo "${campoGuardado.nombre}" guardado${poligonoCampo ? " (contorno punteado)" : ""}.`;
+      banner.classList.remove("hidden");
+    }
+
+    document.getElementById("txtNombreCampoNuevo").value = "";
+    document.getElementById("txtUbicacionCampo").value = "";
+    limpiarPoligonoActual();
+    await cargarParcelasGestion();
+
+    iniciarParcelaEnUltimoCampo();
+  } catch (err) {
+    alert("Error de conexión al guardar el campo.");
+  }
+}
+
+async function guardarParcelaDesdeFormulario() {
+  const idEdicion = document.getElementById("editParcelaId").value;
+  const selCampoVal = document.getElementById("selCampoGeneral")?.value || "";
+  const campo_general = document
+    .getElementById("txtCampoGeneral")
+    .value.trim()
+    .replace(/\s+/g, " ");
+  const id_campo =
+    selCampoVal && !selCampoVal.startsWith("__NOMBRE__:")
+      ? parseInt(selCampoVal, 10)
+      : null;
+
+  const nombre = document
+    .getElementById("txtNombreParcela")
+    .value.trim()
+    .replace(/\s+/g, " ");
+  const cultivo = document.getElementById("txtCultivo").value.trim();
+  const latitud = document.getElementById("txtLatitud").value;
+  const longitud = document.getElementById("txtLongitud").value;
+
+  if (!nombre) {
+    alert("Ingresa el nombre de la parcela o sector.");
+    return;
+  }
+
+  if (
+    existeParcelaDuplicadaEnMismoAmbito({
+      nombreParcela: nombre,
+      idCampo: id_campo,
+      nombreCampo: campo_general,
+      idExcluir: idEdicion,
+    })
+  ) {
+    const detalleAmbito = campo_general
+      ? `dentro del campo "${campo_general}"`
+      : "entre las parcelas independientes";
+    alert(
+      `Ya existe una parcela llamada "${nombre}" ${detalleAmbito}. Usa otro nombre para evitar confusiones.`,
     );
     return;
   }
@@ -851,12 +1255,13 @@ async function guardarParcela(e) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id_usuario: usuarioSesion.id,
+        id_campo,
         campo_general: campo_general || null,
         nombre,
         cultivo,
         latitud,
         longitud,
-        codigo_mac,
+        codigo_mac: null,
         poligono: verticesActivos.length >= 3 ? verticesActivos : null,
         area_m2: areaCalculadaM2 > 0 ? areaCalculadaM2.toFixed(2) : null,
       }),

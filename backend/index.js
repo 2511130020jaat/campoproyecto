@@ -21,22 +21,187 @@ const db = mysql.createPool({
   database: process.env.DB_NAME,
 });
 
+function inicializarEsquemaCampos() {
+  const qCrearCampos = `
+    CREATE TABLE IF NOT EXISTS campos (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      id_usuario INT NOT NULL,
+      nombre VARCHAR(120) NOT NULL,
+      ubicacion_ref VARCHAR(180) NULL,
+      creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_usuario_campo_nombre (id_usuario, nombre),
+      KEY idx_campos_usuario (id_usuario)
+    )
+  `;
+
+  db.query(qCrearCampos, (errTabla) => {
+    if (errTabla) {
+      console.warn("ℹ️ Esquema tabla campos:", errTabla.message);
+      return;
+    }
+
+    db.query(
+      "ALTER TABLE parcelas ADD COLUMN campo_general VARCHAR(120) NULL",
+      (errAlterCampo) => {
+        if (errAlterCampo && errAlterCampo.code !== "ER_DUP_FIELDNAME") {
+          console.warn("ℹ️ Esquema campo_general:", errAlterCampo.message);
+        }
+
+        db.query(
+          "ALTER TABLE parcelas ADD COLUMN id_campo INT NULL",
+          (errAlterIdCampo) => {
+            if (
+              errAlterIdCampo &&
+              errAlterIdCampo.code !== "ER_DUP_FIELDNAME"
+            ) {
+              console.warn("ℹ️ Esquema id_campo:", errAlterIdCampo.message);
+            }
+
+            db.query(
+              "CREATE INDEX idx_parcelas_id_campo ON parcelas (id_campo)",
+              (errIdx) => {
+                if (errIdx && errIdx.code !== "ER_DUP_KEYNAME") {
+                  console.warn("ℹ️ Índice id_campo:", errIdx.message);
+                }
+
+                // Migrar etiquetas existentes de campo_general a la tabla formal campos
+                const qMigrarCampos = `
+                  INSERT IGNORE INTO campos (id_usuario, nombre)
+                  SELECT DISTINCT p.id_usuario, TRIM(p.campo_general)
+                  FROM parcelas p
+                  WHERE p.id_usuario IS NOT NULL
+                    AND p.campo_general IS NOT NULL
+                    AND TRIM(p.campo_general) <> ''
+                `;
+
+                db.query(qMigrarCampos, () => {
+                  const qEnlazarParcelas = `
+                    UPDATE parcelas p
+                    JOIN campos c
+                      ON c.id_usuario = p.id_usuario
+                     AND LOWER(TRIM(c.nombre)) = LOWER(TRIM(p.campo_general))
+                    SET p.id_campo = c.id,
+                        p.campo_general = c.nombre
+                    WHERE p.campo_general IS NOT NULL
+                      AND TRIM(p.campo_general) <> ''
+                      AND (p.id_campo IS NULL OR p.id_campo <> c.id)
+                  `;
+
+                  db.query(qEnlazarParcelas, (errEnl) => {
+                    if (errEnl) {
+                      console.warn(
+                        "ℹ️ Sincronización id_campo:",
+                        errEnl.message,
+                      );
+                    }
+                  });
+                });
+              },
+            );
+          },
+        );
+      },
+    );
+  });
+}
+
+function resolverCampoUsuario(idUsuario, idCampoRaw, nombreCampoRaw, callback) {
+  const usuarioNum = parseInt(idUsuario, 10);
+  const nombreLimpio =
+    nombreCampoRaw && String(nombreCampoRaw).trim() !== ""
+      ? String(nombreCampoRaw).trim()
+      : null;
+  const idCampoNum =
+    idCampoRaw !== null &&
+    idCampoRaw !== undefined &&
+    String(idCampoRaw).trim() !== ""
+      ? parseInt(idCampoRaw, 10)
+      : null;
+
+  if (!usuarioNum) {
+    return callback(null, { id_campo: null, campo_general: nombreLimpio });
+  }
+
+  if (idCampoNum && !isNaN(idCampoNum)) {
+    return db.query(
+      "SELECT id, nombre FROM campos WHERE id = ? AND id_usuario = ? LIMIT 1",
+      [idCampoNum, usuarioNum],
+      (err, rows) => {
+        if (err) return callback(err, null);
+        if (rows.length > 0) {
+          return callback(null, {
+            id_campo: rows[0].id,
+            campo_general: rows[0].nombre,
+          });
+        }
+        if (!nombreLimpio) {
+          return callback(null, { id_campo: null, campo_general: null });
+        }
+        resolverCampoUsuario(usuarioNum, null, nombreLimpio, callback);
+      },
+    );
+  }
+
+  if (!nombreLimpio) {
+    return callback(null, { id_campo: null, campo_general: null });
+  }
+
+  db.query(
+    "SELECT id, nombre FROM campos WHERE id_usuario = ? AND LOWER(TRIM(nombre)) = LOWER(TRIM(?)) LIMIT 1",
+    [usuarioNum, nombreLimpio],
+    (errSel, rows) => {
+      if (errSel) return callback(errSel, null);
+      if (rows.length > 0) {
+        return callback(null, {
+          id_campo: rows[0].id,
+          campo_general: rows[0].nombre,
+        });
+      }
+
+      db.query(
+        "INSERT INTO campos (id_usuario, nombre) VALUES (?, ?)",
+        [usuarioNum, nombreLimpio],
+        (errIns, resIns) => {
+          if (errIns) {
+            if (errIns.code === "ER_DUP_ENTRY") {
+              return db.query(
+                "SELECT id, nombre FROM campos WHERE id_usuario = ? AND LOWER(TRIM(nombre)) = LOWER(TRIM(?)) LIMIT 1",
+                [usuarioNum, nombreLimpio],
+                (errDup, rowsDup) => {
+                  if (errDup) return callback(errDup, null);
+                  if (rowsDup.length > 0) {
+                    return callback(null, {
+                      id_campo: rowsDup[0].id,
+                      campo_general: rowsDup[0].nombre,
+                    });
+                  }
+                  return callback(null, {
+                    id_campo: null,
+                    campo_general: nombreLimpio,
+                  });
+                },
+              );
+            }
+            return callback(errIns, null);
+          }
+
+          return callback(null, {
+            id_campo: resIns.insertId,
+            campo_general: nombreLimpio,
+          });
+        },
+      );
+    },
+  );
+}
+
 db.getConnection((err, connection) => {
   if (err) {
     console.error("❌ Error conectando a MySQL:", err.message);
   } else {
     console.log("✅ Conectado exitosamente a la base de datos");
     connection.release();
-
-    // Asegurar columna campo_general para agrupar parcelas dentro de un campo matriz
-    db.query(
-      "ALTER TABLE parcelas ADD COLUMN campo_general VARCHAR(120) NULL",
-      (errAlter) => {
-        if (errAlter && errAlter.code !== "ER_DUP_FIELDNAME") {
-          console.warn("ℹ️ Esquema campo_general:", errAlter.message);
-        }
-      },
-    );
+    inicializarEsquemaCampos();
   }
 });
 
@@ -113,7 +278,6 @@ app.post("/api/auth/login", (req, res) => {
   });
 });
 
-////
 app.post("/api/auth/google", async (req, res) => {
   const { credential } = req.body;
 
@@ -188,12 +352,125 @@ app.post("/api/auth/google", async (req, res) => {
 });
 
 // ==========================================
+// GESTIÓN DE CAMPOS / FUNDOS
+// ==========================================
+
+app.get("/api/campos", (req, res) => {
+  const { id_usuario } = req.query;
+  const condiciones = [];
+  const params = [];
+
+  if (id_usuario) {
+    condiciones.push("c.id_usuario = ?");
+    params.push(id_usuario);
+  }
+
+  const filtroSQL =
+    condiciones.length > 0 ? " WHERE " + condiciones.join(" AND ") : "";
+
+  const query = `
+    SELECT
+      c.id,
+      c.id_usuario,
+      c.nombre,
+      c.ubicacion_ref,
+      c.creado_en,
+      COUNT(p.id) AS total_parcelas,
+      COALESCE(SUM(p.area_m2), 0) AS area_total_m2
+    FROM campos c
+    LEFT JOIN parcelas p
+      ON p.id_usuario = c.id_usuario
+     AND (
+       p.id_campo = c.id
+       OR (
+         p.id_campo IS NULL
+         AND p.campo_general IS NOT NULL
+         AND LOWER(TRIM(p.campo_general)) = LOWER(TRIM(c.nombre))
+       )
+     )
+    ${filtroSQL}
+    GROUP BY c.id, c.id_usuario, c.nombre, c.ubicacion_ref, c.creado_en
+    ORDER BY c.nombre ASC, c.id ASC
+  `;
+
+  db.query(query, params, (err, rows) => {
+    if (err) {
+      console.error("❌ Error consultando campos:", err);
+      return res.status(500).json({ error: "Error al consultar campos." });
+    }
+    res.json(rows);
+  });
+});
+
+app.post("/api/campos", (req, res) => {
+  const { id_usuario, nombre, ubicacion_ref } = req.body;
+
+  if (!id_usuario || !nombre || String(nombre).trim() === "") {
+    return res.status(400).json({
+      error: "El ID de usuario y el nombre del campo son obligatorios.",
+    });
+  }
+
+  const nombreLimpio = String(nombre).trim();
+  const ubicacionLimpia =
+    ubicacion_ref && String(ubicacion_ref).trim() !== ""
+      ? String(ubicacion_ref).trim()
+      : null;
+
+  db.query(
+    "SELECT id, nombre, ubicacion_ref FROM campos WHERE id_usuario = ? AND LOWER(TRIM(nombre)) = LOWER(TRIM(?)) LIMIT 1",
+    [id_usuario, nombreLimpio],
+    (errSel, rows) => {
+      if (errSel) {
+        console.error("❌ Error buscando campo:", errSel);
+        return res.status(500).json({ error: "Error al validar el campo." });
+      }
+
+      if (rows.length > 0) {
+        return res.status(200).json({
+          ok: true,
+          existente: true,
+          campo: rows[0],
+          mensaje: "El campo ya existía y fue seleccionado.",
+        });
+      }
+
+      db.query(
+        "INSERT INTO campos (id_usuario, nombre, ubicacion_ref) VALUES (?, ?, ?)",
+        [id_usuario, nombreLimpio, ubicacionLimpia],
+        (errIns, result) => {
+          if (errIns) {
+            console.error("❌ Error creando campo:", errIns);
+            return res
+              .status(500)
+              .json({ error: "No se pudo crear el campo." });
+          }
+
+          res.status(201).json({
+            ok: true,
+            existente: false,
+            campo: {
+              id: result.insertId,
+              id_usuario: Number(id_usuario),
+              nombre: nombreLimpio,
+              ubicacion_ref: ubicacionLimpia,
+            },
+            mensaje: "Campo registrado con éxito.",
+          });
+        },
+      );
+    },
+  );
+});
+
+// ==========================================
 // GESTIÓN DE PARCELAS Y CONFIGURACIÓN
 // ==========================================
 
 app.post("/api/parcelas", (req, res) => {
   const {
     id_usuario,
+    id_campo,
     campo_general,
     nombre,
     cultivo,
@@ -210,104 +487,130 @@ app.post("/api/parcelas", (req, res) => {
     });
   }
 
-  const campoVal =
-    campo_general && String(campo_general).trim() !== ""
-      ? String(campo_general).trim()
-      : null;
-  const latVal =
-    latitud !== "" && latitud !== null && latitud !== undefined
-      ? parseFloat(latitud)
-      : null;
-  const lonVal =
-    longitud !== "" && longitud !== null && longitud !== undefined
-      ? parseFloat(longitud)
-      : null;
-  const poligonoStr =
-    Array.isArray(poligono) && poligono.length >= 3
-      ? JSON.stringify(poligono)
-      : null;
-  const areaVal = area_m2 ? parseFloat(area_m2) : null;
-
-  const queryParcela = `
-    INSERT INTO parcelas (id_usuario, campo_general, nombre, latitud, longitud, poligono_json, area_m2) 
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `;
-
-  db.query(
-    queryParcela,
-    [id_usuario, campoVal, nombre.trim(), latVal, lonVal, poligonoStr, areaVal],
-    (err, resParcela) => {
-      if (err) {
-        console.error("❌ Error al guardar la parcela:", err);
-        return res.status(500).json({
-          error:
-            "Error al guardar la parcela: " + (err.sqlMessage || err.message),
-        });
+  resolverCampoUsuario(
+    id_usuario,
+    id_campo,
+    campo_general,
+    (errCampo, campoResuelto) => {
+      if (errCampo) {
+        console.error("❌ Error resolviendo campo:", errCampo);
+        return res
+          .status(500)
+          .json({ error: "Error al vincular el campo de la parcela." });
       }
 
-      const id_parcela = resParcela.insertId;
+      const idCampoVal = campoResuelto?.id_campo ?? null;
+      const campoVal = campoResuelto?.campo_general ?? null;
+      const latVal =
+        latitud !== "" && latitud !== null && latitud !== undefined
+          ? parseFloat(latitud)
+          : null;
+      const lonVal =
+        longitud !== "" && longitud !== null && longitud !== undefined
+          ? parseFloat(longitud)
+          : null;
+      const poligonoStr =
+        Array.isArray(poligono) && poligono.length >= 3
+          ? JSON.stringify(poligono)
+          : null;
+      const areaVal = area_m2 ? parseFloat(area_m2) : null;
 
-      const registrarCultivoYDispositivo = (callbackFinal) => {
-        if (cultivo && cultivo.trim() !== "") {
-          db.query(
-            "INSERT INTO cultivos (nombre, id_parcela) VALUES (?, ?)",
-            [cultivo.trim(), id_parcela],
-            (errCult, resCult) => {
-              if (errCult) {
-                return db.query(
-                  "INSERT INTO cultivos (nombre) VALUES (?)",
-                  [cultivo.trim()],
-                  (errCult2, resCult2) => {
-                    const id_cultivo =
-                      !errCult2 && resCult2 ? resCult2.insertId : null;
-                    callbackFinal(id_cultivo);
-                  },
-                );
-              }
-              callbackFinal(resCult.insertId);
-            },
-          );
-        } else {
-          callbackFinal(null);
-        }
-      };
+      const queryParcela = `
+        INSERT INTO parcelas (id_usuario, id_campo, campo_general, nombre, latitud, longitud, poligono_json, area_m2) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `;
 
-      registrarCultivoYDispositivo((id_cultivo) => {
-        if (codigo_mac && codigo_mac.trim() !== "") {
-          const queryDisp = `
-            INSERT INTO dispositivos (codigo_mac, id_parcela, id_cultivo, estado) 
-            VALUES (?, ?, ?, 'activo') 
-            ON DUPLICATE KEY UPDATE 
-              id_parcela = VALUES(id_parcela),
-              id_cultivo = COALESCE(VALUES(id_cultivo), id_cultivo),
-              estado = 'activo'
-          `;
+      db.query(
+        queryParcela,
+        [
+          id_usuario,
+          idCampoVal,
+          campoVal,
+          nombre.trim(),
+          latVal,
+          lonVal,
+          poligonoStr,
+          areaVal,
+        ],
+        (err, resParcela) => {
+          if (err) {
+            console.error("❌ Error al guardar la parcela:", err);
+            return res.status(500).json({
+              error:
+                "Error al guardar la parcela: " +
+                (err.sqlMessage || err.message),
+            });
+          }
 
-          db.query(
-            queryDisp,
-            [codigo_mac.trim(), id_parcela, id_cultivo],
-            (errDisp) => {
-              if (errDisp) {
-                console.error(
-                  "⚠️ Parcela creada, pero error vinculando ESP32:",
-                  errDisp,
-                );
-              }
+          const id_parcela = resParcela.insertId;
+
+          const registrarCultivoYDispositivo = (callbackFinal) => {
+            if (cultivo && cultivo.trim() !== "") {
+              db.query(
+                "INSERT INTO cultivos (nombre, id_parcela) VALUES (?, ?)",
+                [cultivo.trim(), id_parcela],
+                (errCult, resCult) => {
+                  if (errCult) {
+                    return db.query(
+                      "INSERT INTO cultivos (nombre) VALUES (?)",
+                      [cultivo.trim()],
+                      (errCult2, resCult2) => {
+                        const id_cultivo =
+                          !errCult2 && resCult2 ? resCult2.insertId : null;
+                        callbackFinal(id_cultivo);
+                      },
+                    );
+                  }
+                  callbackFinal(resCult.insertId);
+                },
+              );
+            } else {
+              callbackFinal(null);
+            }
+          };
+
+          registrarCultivoYDispositivo((id_cultivo) => {
+            if (codigo_mac && codigo_mac.trim() !== "") {
+              const queryDisp = `
+                INSERT INTO dispositivos (codigo_mac, id_parcela, id_cultivo, estado) 
+                VALUES (?, ?, ?, 'activo') 
+                ON DUPLICATE KEY UPDATE 
+                  id_parcela = VALUES(id_parcela),
+                  id_cultivo = COALESCE(VALUES(id_cultivo), id_cultivo),
+                  estado = 'activo'
+              `;
+
+              db.query(
+                queryDisp,
+                [codigo_mac.trim(), id_parcela, id_cultivo],
+                (errDisp) => {
+                  if (errDisp) {
+                    console.error(
+                      "⚠️ Parcela creada, pero error vinculando ESP32:",
+                      errDisp,
+                    );
+                  }
+                  return res.status(201).json({
+                    ok: true,
+                    id_parcela,
+                    id_campo: idCampoVal,
+                    campo_general: campoVal,
+                    mensaje: "Parcela registrada con éxito.",
+                  });
+                },
+              );
+            } else {
               return res.status(201).json({
                 ok: true,
                 id_parcela,
+                id_campo: idCampoVal,
+                campo_general: campoVal,
                 mensaje: "Parcela registrada con éxito.",
               });
-            },
-          );
-        } else {
-          return res.status(201).json({
-            ok: true,
-            id_parcela,
-            mensaje: "Parcela registrada con éxito.",
+            }
           });
-        }
-      });
+        },
+      );
     },
   );
 });
@@ -324,8 +627,9 @@ app.get("/api/parcelas", (req, res) => {
 
   const query = `
     SELECT 
-      p.id, 
-      p.campo_general,
+      p.id,
+      p.id_campo,
+      COALESCE(cm.nombre, p.campo_general) AS campo_general,
       p.nombre AS parcela, 
       p.umbral_humedad,
       p.modo_riego,
@@ -337,12 +641,13 @@ app.get("/api/parcelas", (req, res) => {
       MAX(d.codigo_mac) AS codigo_mac,
       GROUP_CONCAT(DISTINCT d.codigo_mac ORDER BY d.id ASC SEPARATOR ',') AS lista_macs
     FROM parcelas p
+    LEFT JOIN campos cm ON cm.id = p.id_campo
     LEFT JOIN cultivos c ON c.id_parcela = p.id
     LEFT JOIN dispositivos d ON d.id_parcela = p.id
     LEFT JOIN cultivos c2 ON c2.id = d.id_cultivo
     ${filtroSQL}
-    GROUP BY p.id, p.campo_general, p.nombre, p.umbral_humedad, p.modo_riego, p.latitud, p.longitud, p.poligono_json, p.area_m2
-    ORDER BY p.campo_general ASC, p.id ASC
+    GROUP BY p.id, p.id_campo, cm.nombre, p.campo_general, p.nombre, p.umbral_humedad, p.modo_riego, p.latitud, p.longitud, p.poligono_json, p.area_m2
+    ORDER BY COALESCE(cm.nombre, p.campo_general) ASC, p.id ASC
   `;
 
   db.query(query, params, (err, resultados) => {
@@ -357,6 +662,8 @@ app.get("/api/parcelas", (req, res) => {
 app.put("/api/parcelas/:id", (req, res) => {
   const { id } = req.params;
   const {
+    id_usuario,
+    id_campo,
     campo_general,
     nombre,
     cultivo,
@@ -373,103 +680,146 @@ app.put("/api/parcelas/:id", (req, res) => {
       .json({ error: "El nombre de la parcela es obligatorio." });
   }
 
-  const campoVal =
-    campo_general && String(campo_general).trim() !== ""
-      ? String(campo_general).trim()
-      : null;
-  const latVal =
-    latitud !== "" && latitud !== null && latitud !== undefined
-      ? parseFloat(latitud)
-      : null;
-  const lonVal =
-    longitud !== "" && longitud !== null && longitud !== undefined
-      ? parseFloat(longitud)
-      : null;
-  const poligonoStr =
-    Array.isArray(poligono) && poligono.length >= 3
-      ? JSON.stringify(poligono)
-      : null;
-  const areaVal = area_m2 ? parseFloat(area_m2) : null;
-
-  const queryUpdate = `
-    UPDATE parcelas 
-    SET campo_general = ?, nombre = ?, latitud = ?, longitud = ?, poligono_json = ?, area_m2 = ?
-    WHERE id = ?
-  `;
-
   db.query(
-    queryUpdate,
-    [campoVal, nombre.trim(), latVal, lonVal, poligonoStr, areaVal, id],
-    (err) => {
-      if (err) {
-        console.error("❌ Error al actualizar parcela:", err);
+    "SELECT id_usuario FROM parcelas WHERE id = ? LIMIT 1",
+    [id],
+    (errBusq, rowsParcela) => {
+      if (errBusq) {
+        console.error("❌ Error consultando parcela:", errBusq);
         return res
           .status(500)
-          .json({ error: "Error al actualizar parcela: " + err.sqlMessage });
+          .json({ error: "Error al consultar la parcela." });
+      }
+      if (rowsParcela.length === 0) {
+        return res.status(404).json({ error: "Parcela no encontrada." });
       }
 
-      const actualizarCultivo = (callback) => {
-        if (!cultivo || cultivo.trim() === "") return callback(null);
+      const duenoId = id_usuario || rowsParcela[0].id_usuario;
 
-        db.query(
-          "SELECT id FROM cultivos WHERE id_parcela = ? LIMIT 1",
-          [id],
-          (errSel, rows) => {
-            if (!errSel && rows.length > 0) {
-              const idCultivo = rows[0].id;
-              db.query(
-                "UPDATE cultivos SET nombre = ? WHERE id = ?",
-                [cultivo.trim(), idCultivo],
-                () => {
-                  callback(idCultivo);
-                },
-              );
-            } else {
-              db.query(
-                "INSERT INTO cultivos (nombre, id_parcela) VALUES (?, ?)",
-                [cultivo.trim(), id],
-                (errIns, resIns) => {
-                  callback(!errIns && resIns ? resIns.insertId : null);
-                },
-              );
-            }
-          },
-        );
-      };
+      resolverCampoUsuario(
+        duenoId,
+        id_campo,
+        campo_general,
+        (errCampo, campoResuelto) => {
+          if (errCampo) {
+            console.error("❌ Error resolviendo campo:", errCampo);
+            return res
+              .status(500)
+              .json({ error: "Error al vincular el campo de la parcela." });
+          }
 
-      actualizarCultivo((id_cultivo) => {
-        if (codigo_mac && codigo_mac.trim() !== "") {
-          const queryDisp = `
-            INSERT INTO dispositivos (codigo_mac, id_parcela, id_cultivo, estado)
-            VALUES (?, ?, ?, 'activo')
-            ON DUPLICATE KEY UPDATE
-              id_parcela = VALUES(id_parcela),
-              id_cultivo = COALESCE(VALUES(id_cultivo), id_cultivo),
-              estado = 'activo'
+          const idCampoVal = campoResuelto?.id_campo ?? null;
+          const campoVal = campoResuelto?.campo_general ?? null;
+          const latVal =
+            latitud !== "" && latitud !== null && latitud !== undefined
+              ? parseFloat(latitud)
+              : null;
+          const lonVal =
+            longitud !== "" && longitud !== null && longitud !== undefined
+              ? parseFloat(longitud)
+              : null;
+          const poligonoStr =
+            Array.isArray(poligono) && poligono.length >= 3
+              ? JSON.stringify(poligono)
+              : null;
+          const areaVal = area_m2 ? parseFloat(area_m2) : null;
+
+          const queryUpdate = `
+            UPDATE parcelas 
+            SET id_campo = ?, campo_general = ?, nombre = ?, latitud = ?, longitud = ?, poligono_json = ?, area_m2 = ?
+            WHERE id = ?
           `;
+
           db.query(
-            queryDisp,
-            [codigo_mac.trim(), id, id_cultivo],
-            (errDisp) => {
-              if (errDisp) {
-                console.warn(
-                  "⚠️ Parcela actualizada, pero error con MAC:",
-                  errDisp.message,
-                );
+            queryUpdate,
+            [
+              idCampoVal,
+              campoVal,
+              nombre.trim(),
+              latVal,
+              lonVal,
+              poligonoStr,
+              areaVal,
+              id,
+            ],
+            (err) => {
+              if (err) {
+                console.error("❌ Error al actualizar parcela:", err);
+                return res.status(500).json({
+                  error: "Error al actualizar parcela: " + err.sqlMessage,
+                });
               }
-              return res.json({
-                ok: true,
-                mensaje: "Parcela actualizada correctamente.",
+
+              const actualizarCultivo = (callback) => {
+                if (!cultivo || cultivo.trim() === "") return callback(null);
+
+                db.query(
+                  "SELECT id FROM cultivos WHERE id_parcela = ? LIMIT 1",
+                  [id],
+                  (errSel, rows) => {
+                    if (!errSel && rows.length > 0) {
+                      const idCultivo = rows[0].id;
+                      db.query(
+                        "UPDATE cultivos SET nombre = ? WHERE id = ?",
+                        [cultivo.trim(), idCultivo],
+                        () => {
+                          callback(idCultivo);
+                        },
+                      );
+                    } else {
+                      db.query(
+                        "INSERT INTO cultivos (nombre, id_parcela) VALUES (?, ?)",
+                        [cultivo.trim(), id],
+                        (errIns, resIns) => {
+                          callback(!errIns && resIns ? resIns.insertId : null);
+                        },
+                      );
+                    }
+                  },
+                );
+              };
+
+              actualizarCultivo((id_cultivo) => {
+                if (codigo_mac && codigo_mac.trim() !== "") {
+                  const queryDisp = `
+                    INSERT INTO dispositivos (codigo_mac, id_parcela, id_cultivo, estado)
+                    VALUES (?, ?, ?, 'activo')
+                    ON DUPLICATE KEY UPDATE
+                      id_parcela = VALUES(id_parcela),
+                      id_cultivo = COALESCE(VALUES(id_cultivo), id_cultivo),
+                      estado = 'activo'
+                  `;
+                  db.query(
+                    queryDisp,
+                    [codigo_mac.trim(), id, id_cultivo],
+                    (errDisp) => {
+                      if (errDisp) {
+                        console.warn(
+                          "⚠️ Parcela actualizada, pero error con MAC:",
+                          errDisp.message,
+                        );
+                      }
+                      return res.json({
+                        ok: true,
+                        id_campo: idCampoVal,
+                        campo_general: campoVal,
+                        mensaje: "Parcela actualizada correctamente.",
+                      });
+                    },
+                  );
+                } else {
+                  return res.json({
+                    ok: true,
+                    id_campo: idCampoVal,
+                    campo_general: campoVal,
+                    mensaje: "Parcela actualizada correctamente.",
+                  });
+                }
               });
             },
           );
-        } else {
-          return res.json({
-            ok: true,
-            mensaje: "Parcela actualizada correctamente.",
-          });
-        }
-      });
+        },
+      );
     },
   );
 });
@@ -622,7 +972,8 @@ app.get("/api/dispositivos", (req, res) => {
       d.estado,
       p.id AS id_parcela,
       p.nombre AS parcela,
-      p.campo_general,
+      p.id_campo,
+      COALESCE(cm.nombre, p.campo_general) AS campo_general,
       p.umbral_humedad,
       COALESCE(c.nombre, 'General') AS cultivo,
       (
@@ -660,6 +1011,7 @@ app.get("/api/dispositivos", (req, res) => {
       ) AS total_registros
     FROM dispositivos d
     JOIN parcelas p ON d.id_parcela = p.id
+    LEFT JOIN campos cm ON cm.id = p.id_campo
     LEFT JOIN cultivos c ON d.id_cultivo = c.id
     ${filtroSQL}
     ORDER BY p.id ASC, d.id ASC
@@ -1053,10 +1405,6 @@ app.get("/api/riego/historial", (req, res) => {
 });
 
 // ==========================================
-// MOTOR DE PRONÓSTICO HORARIO, 5 DÍAS Y UBICACIÓN
-// ==========================================
-
-// ==========================================
 // MOTOR DE PRONÓSTICO HORARIO, MICROCLIMA, 5 DÍAS Y UBICACIÓN
 // ==========================================
 
@@ -1127,7 +1475,6 @@ function analizarSeriesHorarias(clima) {
     };
   }
 
-  // Anclar al reloj local devuelto por Open-Meteo para evitar desfase UTC del servidor
   const horaLocalRef = String(clima.current?.time || "").slice(0, 13);
   let indiceInicio = 0;
 
@@ -1166,14 +1513,12 @@ function analizarSeriesHorarias(clima) {
     };
   };
 
-  // Últimas 12 horas (incluye madrugada)
   const inicioPasado = Math.max(0, indiceInicio - 12);
   const ultimas_12h = [];
   for (let i = inicioPasado; i < indiceInicio; i++) {
     ultimas_12h.push(mapearHora(i));
   }
 
-  // Próximas 24 horas
   const limiteFuturo = Math.min(clima.hourly.time.length, indiceInicio + 24);
   const proximas_24h = [];
   for (let i = indiceInicio; i < limiteFuturo; i++) {
@@ -1202,7 +1547,6 @@ function analizarSeriesHorarias(clima) {
     (nubosidadActual >= 80 && humedadActual >= 82) ||
     proximas_24h.slice(0, 3).some((h) => h.es_garua);
 
-  // Detectar sol intermitente / nubosidad irregular en horas diurnas (07:00 a 17:00)
   const horasDiurnas = proximas_24h.filter((h) => {
     const hh = parseInt(h.hora.split(":")[0], 10);
     return hh >= 7 && hh <= 17;
@@ -1407,7 +1751,8 @@ app.get("/api/alertas-agro/:id_usuario", (req, res) => {
   const queryParcelas = `
     SELECT 
       p.id,
-      p.campo_general,
+      p.id_campo,
+      COALESCE(cm.nombre, p.campo_general) AS campo_general,
       p.nombre AS parcela,
       p.umbral_humedad,
       p.modo_riego,
@@ -1433,10 +1778,11 @@ app.get("/api/alertas-agro/:id_usuario", (req, res) => {
         LIMIT 1
       ) AS ultima_temp_sensor
     FROM parcelas p
+    LEFT JOIN campos cm ON cm.id = p.id_campo
     LEFT JOIN cultivos c ON c.id_parcela = p.id
     LEFT JOIN dispositivos d ON d.id_parcela = p.id
     WHERE p.id_usuario = ?
-    GROUP BY p.id, p.campo_general, p.nombre, p.umbral_humedad, p.modo_riego, p.latitud, p.longitud, p.poligono_json
+    GROUP BY p.id, p.id_campo, cm.nombre, p.campo_general, p.nombre, p.umbral_humedad, p.modo_riego, p.latitud, p.longitud, p.poligono_json
     ORDER BY p.id ASC
   `;
 
@@ -1520,6 +1866,7 @@ app.get("/api/alertas-agro/:id_usuario", (req, res) => {
 
       resultados.push({
         id: p.id,
+        id_campo: p.id_campo || null,
         campo_general: p.campo_general || null,
         parcela: p.parcela,
         cultivo: p.cultivo,
@@ -1544,6 +1891,7 @@ app.get("/api/alertas-agro/:id_usuario", (req, res) => {
     res.json(resultados);
   });
 });
+
 // ==========================================
 // RECEPCIÓN Y CONSULTA DE TELEMETRÍA
 // ==========================================
@@ -1715,14 +2063,12 @@ app.post("/api/telemetria", (req, res) => {
             `;
             return db.query(qCheckPospuesto, [id_parcela], (errCp, rowsCp) => {
               if (!errCp && rowsCp.length === 0) {
-                calcularAhorroTurnoM3(id_parcela, area_m2, (ahorro) => {
-                  const detalle = `Lluvia prevista (${pronostico6h.maxProb6h}% en ${pronostico6h.horasHastaLluvia}h, ${pronostico6h.totalMm6h} mm) — Turno pospuesto (Ahorro est.: ${ahorro.m3.toFixed(2)} m³ / ${ahorro.litros} L)`;
-                  db.query(
-                    "INSERT INTO historial_riego (id_parcela, origen, accion, detalle) VALUES (?, 'IA_CLIMA', 'RIEGO POSPUESTO', ?)",
-                    [id_parcela, detalle],
-                    () => enviarRespuesta(),
-                  );
-                });
+                const detalle = `Lluvia prevista (${pronostico6h.maxProb6h}% en ${pronostico6h.horasHastaLluvia}h, ${pronostico6h.totalMm6h} mm) — Turno pospuesto`;
+                db.query(
+                  "INSERT INTO historial_riego (id_parcela, origen, accion, detalle) VALUES (?, 'IA_CLIMA', 'RIEGO POSPUESTO', ?)",
+                  [id_parcela, detalle],
+                  () => enviarRespuesta(),
+                );
               } else {
                 enviarRespuesta();
               }
@@ -2295,7 +2641,6 @@ app.get("/api/noticias-agro", (req, res) => {
       !err &&
       rows.length > 0 &&
       (rows[0].noticias_json.includes("<a") ||
-        rows[0].noticias_json.includes("<a") ||
         rows[0].noticias_json.includes("href="));
 
     const cacheValido =
@@ -2340,132 +2685,6 @@ app.get("/api/noticias-agro", (req, res) => {
         noticias: noticiasNuevas,
       });
     });
-  });
-});
-
-// GET /api/alertas-agro/:id_usuario - Pronóstico 24h, 5 días y ubicación distrital/provincial/regional
-app.get("/api/alertas-agro/:id_usuario", (req, res) => {
-  const { id_usuario } = req.params;
-
-  const queryParcelas = `
-    SELECT 
-      p.id,
-      p.campo_general,
-      p.nombre AS parcela,
-      p.umbral_humedad,
-      p.modo_riego,
-      p.latitud,
-      p.longitud,
-      COALESCE(MAX(c.nombre), 'Cultivo General') AS cultivo,
-      MAX(d.codigo_mac) AS codigo_mac,
-      (
-        SELECT t.humedad_suelo
-        FROM datos_telemetria t
-        JOIN dispositivos d2 ON t.id_dispositivo = d2.id
-        WHERE d2.id_parcela = p.id
-        ORDER BY t.fecha_registro DESC
-        LIMIT 1
-      ) AS ultima_humedad_suelo,
-      (
-        SELECT t.temperatura
-        FROM datos_telemetria t
-        JOIN dispositivos d2 ON t.id_dispositivo = d2.id
-        WHERE d2.id_parcela = p.id
-        ORDER BY t.fecha_registro DESC
-        LIMIT 1
-      ) AS ultima_temp_sensor
-    FROM parcelas p
-    LEFT JOIN cultivos c ON c.id_parcela = p.id
-    LEFT JOIN dispositivos d ON d.id_parcela = p.id
-    WHERE p.id_usuario = ?
-    GROUP BY p.id, p.campo_general, p.nombre, p.umbral_humedad, p.modo_riego, p.latitud, p.longitud
-    ORDER BY p.id ASC
-  `;
-
-  db.query(queryParcelas, [id_usuario], async (err, parcelas) => {
-    if (err) {
-      console.error("❌ Error consultando parcelas para alertas:", err);
-      return res
-        .status(500)
-        .json({ error: "Error al analizar alertas agroclimáticas" });
-    }
-
-    const resultados = [];
-
-    for (const p of parcelas) {
-      const umbral =
-        p.umbral_humedad !== null ? parseFloat(p.umbral_humedad) : 35;
-      const humSuelo =
-        p.ultima_humedad_suelo !== null
-          ? parseFloat(p.ultima_humedad_suelo)
-          : null;
-
-      let ubicacion = {
-        distrito: "Sector Agrícola",
-        provincia: "Jurisdicción Local",
-        departamento: "Perú",
-        etiqueta: "Ubicación GPS",
-      };
-      let clima = null;
-      let proximas_24h = [];
-      let pronostico_6h = {
-        lluviaInminente: false,
-        maxProb6h: 0,
-        totalMm6h: 0,
-        horasHastaLluvia: 1,
-      };
-
-      try {
-        const info = await obtenerPronosticoParcela(p.latitud, p.longitud);
-        ubicacion = info.ubicacion || ubicacion;
-        clima = info.clima;
-        proximas_24h = info.proximas_24h;
-        pronostico_6h = info.pronostico_6h;
-      } catch (e) {
-        console.warn("⚠️ Open-Meteo error:", e.message);
-      }
-
-      let estado = "OPTIMO";
-      let notaBreve = "Parámetros estables";
-
-      if (
-        humSuelo !== null &&
-        humSuelo < umbral &&
-        pronostico_6h.lluviaInminente
-      ) {
-        estado = "ATENCION";
-        notaBreve = `Riego pospuesto: lluvia (${pronostico_6h.maxProb6h}% en ${pronostico_6h.horasHastaLluvia}h)`;
-      } else if (humSuelo !== null && humSuelo < umbral) {
-        estado = "CRITICO";
-        notaBreve = "Humedad baja (" + humSuelo.toFixed(0) + "%)";
-      } else if (humSuelo !== null && humSuelo > 85) {
-        estado = "ATENCION";
-        notaBreve = "Suelo muy húmedo (" + humSuelo.toFixed(0) + "%)";
-      } else if (pronostico_6h.lluviaInminente) {
-        estado = "ATENCION";
-        notaBreve = `Lluvia prevista (${pronostico_6h.maxProb6h}% en ${pronostico_6h.horasHastaLluvia}h)`;
-      } else if (humSuelo === null) {
-        notaBreve = "Esperando telemetría";
-      }
-
-      resultados.push({
-        id: p.id,
-        campo_general: p.campo_general || null,
-        parcela: p.parcela,
-        cultivo: p.cultivo,
-        ubicacion,
-        modo_riego: p.modo_riego || "AUTO",
-        umbral_humedad: umbral,
-        humedad_suelo: humSuelo,
-        estado,
-        notaBreve,
-        clima,
-        proximas_24h,
-        pronostico_6h,
-      });
-    }
-
-    res.json(resultados);
   });
 });
 
@@ -2539,7 +2758,8 @@ app.get("/api/reportes/consolidado", (req, res) => {
   const qIngenieria = `
     SELECT 
       p.id,
-      p.campo_general,
+      p.id_campo,
+      COALESCE(cm.nombre, p.campo_general) AS campo_general,
       p.nombre AS parcela,
       p.umbral_humedad,
       p.modo_riego,
@@ -2554,12 +2774,13 @@ app.get("/api/reportes/consolidado", (req, res) => {
       d2.nodos_json,
       d2.actualizado_en AS diseno_actualizado
     FROM parcelas p
-    LEFT JOIN cultivos c ON c.id_parcela = p.id OR c.id = p.id
+    LEFT JOIN campos cm ON cm.id = p.id_campo
+    LEFT JOIN cultivos c ON c.id_parcela = p.id
     LEFT JOIN dispositivos d ON d.id_parcela = p.id
     LEFT JOIN disenos_2d d2 ON d2.id_parcela = p.id
     WHERE p.id_usuario = ? ${filtroParcelaSQL}
     GROUP BY 
-      p.id, p.campo_general, p.nombre, p.umbral_humedad, p.modo_riego, p.latitud, p.longitud,
+      p.id, p.id_campo, cm.nombre, p.campo_general, p.nombre, p.umbral_humedad, p.modo_riego, p.latitud, p.longitud,
       d2.ancho_metros, d2.alto_metros, d2.costo_metro_pvc, d2.alcance_mesh_metros,
       d2.nodos_json, d2.actualizado_en
     ORDER BY p.id ASC
@@ -2590,6 +2811,7 @@ app.get("/api/reportes/consolidado", (req, res) => {
 
       return {
         id: r.id,
+        id_campo: r.id_campo || null,
         campo_general: r.campo_general || null,
         parcela: r.parcela,
         cultivo: r.cultivo,
