@@ -152,14 +152,18 @@ function cambiarModoMapa(nuevoModo) {
   const estado = document.getElementById("estadoEditorMapa");
   const esCampo = modoRegistro === "CAMPO";
 
-  const estiloInactivo =
-    "bg-slate-900/70 hover:bg-slate-700/70 text-slate-300 hover:text-white border border-slate-700/80 text-xs px-3 py-1.5 rounded-lg font-normal transition inline-flex items-center gap-1.5";
+  const estiloPuntoInactivo =
+    "text-cyan-300 hover:text-cyan-200 border text-xs p-2 rounded-lg transition inline-flex items-center justify-center";
 
   if (nuevoModo === "POLIGONO") {
-    btnPol.className = esCampo
-      ? "bg-rose-600/90 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition inline-flex items-center gap-1.5"
-      : "bg-emerald-600/90 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition inline-flex items-center gap-1.5";
-    btnPto.className = estiloInactivo;
+    if (btnPol) {
+      btnPol.className = esCampo
+        ? "bg-rose-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition inline-flex items-center gap-1.5"
+        : "bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition inline-flex items-center gap-1.5";
+    }
+    if (btnPto) {
+      btnPto.className = estiloPuntoInactivo;
+    }
     if (estado) {
       estado.innerText = esCampo
         ? "Modo: Trazado de perímetro de Campo (rojizo)"
@@ -169,9 +173,14 @@ function cambiarModoMapa(nuevoModo) {
         : "text-xs font-semibold text-emerald-400";
     }
   } else {
-    btnPto.className =
-      "bg-sky-600/90 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition inline-flex items-center gap-1.5";
-    btnPol.className = estiloInactivo;
+    if (btnPto) {
+      btnPto.className =
+        "ring-1 ring-cyan-300 text-cyan-200 border border-cyan-400/70 text-xs p-2 rounded-lg transition inline-flex items-center justify-center";
+    }
+    if (btnPol) {
+      btnPol.className =
+        "bg-transparent hover:bg-white/5 text-slate-300 hover:text-white border border-slate-700/80 text-xs px-3 py-1.5 rounded-lg font-normal transition inline-flex items-center gap-1.5";
+    }
     if (estado) {
       estado.innerText = "Modo: Marcador GPS puntual";
       estado.className = "text-xs font-semibold text-sky-400";

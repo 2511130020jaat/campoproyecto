@@ -12,7 +12,7 @@ let ultimoBoundsVista = null;
 
 // Estado del selector desplegable inferior en Vista de Campo
 let menuOpcionesAbierto = false;
-let seccionDesplegada = null; // "CAMPOS" | "PARCELAS" | null
+let seccionDesplegada = null; // null ("Ver todo") | "CAMPOS" | "PARCELAS"
 let campoActivoDesplegado = null; // nombre del campo seleccionado o null
 
 const COORD_DEFECTO = [-12.6581, -76.6321];
@@ -21,6 +21,13 @@ document.addEventListener("DOMContentLoaded", () => {
   inicializarMapa();
   cargarParcelasUsuario();
 });
+
+function normalizarTexto(valor) {
+  return String(valor || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
 
 function claveStorageCampos() {
   const uid =
@@ -379,7 +386,7 @@ function generarSvgSiluetaParcela(poligono, diseno2d = null) {
 }
 
 // =========================================================================
-// 4. CARGA Y RENDERIZADO (MAPA COMPLETO + DESPLEGABLE CAMPOS / PARCELAS)
+// 4. CARGA Y RENDERIZADO (MAPA SINCRONIZADO + DESPLEGABLE INFERIOR)
 // =========================================================================
 
 async function cargarParcelasUsuario() {
@@ -405,11 +412,11 @@ async function cargarParcelasUsuario() {
       dataCampos.forEach((c) => {
         const pol = parsearPoligonoGuardado(c.poligono_json);
         if (pol.length >= 3) {
-          const nombreLimpio = (c.nombre || "").trim();
+          const nombreLimpio = (c.nombre || "").trim().replace(/\s+/g, " ");
           const idx = contornosCamposGuardados.findIndex(
             (item) =>
               (c.id && String(item.id) === String(c.id)) ||
-              item.nombre.toLowerCase() === nombreLimpio.toLowerCase(),
+              normalizarTexto(item.nombre) === normalizarTexto(nombreLimpio),
           );
           const entrada = {
             id: c.id || null,
@@ -432,7 +439,6 @@ async function cargarParcelasUsuario() {
       }
     }
 
-    poblarSelectorCampoGeneral();
     renderizarVistaDeCampo();
   } catch (err) {
     console.error("Error al cargar vista de campo:", err);
@@ -443,24 +449,26 @@ function obtenerCamposDisponibles() {
   const mapaCampos = new Map();
 
   camposCache.forEach((c) => {
-    const nombre = (c.nombre || "").trim();
+    const nombre = (c.nombre || "").trim().replace(/\s+/g, " ");
     if (!nombre) return;
-    mapaCampos.set(nombre.toLowerCase(), nombre);
+    mapaCampos.set(normalizarTexto(nombre), nombre);
   });
 
   contornosCamposGuardados.forEach((c) => {
-    const nombre = (c.nombre || "").trim();
+    const nombre = (c.nombre || "").trim().replace(/\s+/g, " ");
     if (!nombre) return;
-    if (!mapaCampos.has(nombre.toLowerCase())) {
-      mapaCampos.set(nombre.toLowerCase(), nombre);
+    const clave = normalizarTexto(nombre);
+    if (!mapaCampos.has(clave)) {
+      mapaCampos.set(clave, nombre);
     }
   });
 
   parcelasCache.forEach((p) => {
-    const nombre = (p.campo_general || "").trim();
+    const nombre = (p.campo_general || "").trim().replace(/\s+/g, " ");
     if (!nombre) return;
-    if (!mapaCampos.has(nombre.toLowerCase())) {
-      mapaCampos.set(nombre.toLowerCase(), nombre);
+    const clave = normalizarTexto(nombre);
+    if (!mapaCampos.has(clave)) {
+      mapaCampos.set(clave, nombre);
     }
   });
 
@@ -471,58 +479,30 @@ function obtenerParcelasSinCampo() {
   return parcelasCache.filter((p) => !(p.campo_general || "").trim());
 }
 
-function poblarSelectorCampoGeneral() {
-  const sel = document.getElementById("selFiltroCampoGeneral");
-  if (!sel) return;
-
-  const valorActual = sel.value || "TODOS";
-  const camposOrdenados = obtenerCamposDisponibles();
-  const sinCampo = obtenerParcelasSinCampo();
-
-  sel.innerHTML = '<option value="TODOS">🏡 Todos los campos</option>';
-  camposOrdenados.forEach((cg) => {
-    sel.innerHTML += `<option value="${cg}">🏡 ${cg}</option>`;
-  });
-
-  if (sinCampo.length > 0 && camposOrdenados.length > 0) {
-    sel.innerHTML +=
-      '<option value="__SIN_CAMPO__">🌱 Parcelas Independientes</option>';
-  }
-
-  if (Array.from(sel.options).some((opt) => opt.value === valorActual)) {
-    sel.value = valorActual;
-  }
-}
-
-function filtrarPorCampoGeneral() {
-  const sel = document.getElementById("selFiltroCampoGeneral");
-  const val = sel ? sel.value : "TODOS";
-
-  if (val === "__SIN_CAMPO__") {
-    seccionDesplegada = "PARCELAS";
-    campoActivoDesplegado = null;
-  } else if (val !== "TODOS") {
-    seccionDesplegada = "CAMPOS";
-    campoActivoDesplegado = val;
-  }
-  renderizarVistaDeCampo();
-}
-
 function alternarMenuOpcionesVisualizar() {
   menuOpcionesAbierto = !menuOpcionesAbierto;
   renderizarVistaDeCampo();
 }
 
 function seleccionarOpcionVisualizar(opcion) {
-  seccionDesplegada = opcion;
   menuOpcionesAbierto = false;
 
-  if (opcion === "CAMPOS") {
+  if (opcion === "VER_TODO" || opcion === null) {
+    seccionDesplegada = null;
+    campoActivoDesplegado = null;
+  } else if (opcion === "CAMPOS") {
+    seccionDesplegada = "CAMPOS";
     const campos = obtenerCamposDisponibles();
-    if (!campoActivoDesplegado && campos.length > 0) {
-      campoActivoDesplegado = campos[0];
+    if (
+      !campoActivoDesplegado ||
+      !campos.some(
+        (c) => normalizarTexto(c) === normalizarTexto(campoActivoDesplegado),
+      )
+    ) {
+      campoActivoDesplegado = campos.length > 0 ? campos[0] : null;
     }
   } else if (opcion === "PARCELAS") {
+    seccionDesplegada = "PARCELAS";
     campoActivoDesplegado = null;
   }
 
@@ -587,7 +567,7 @@ function construirTarjetaParcelaHtml(p, nombreCampoGrupo = "") {
 
         <div class="p-4 space-y-3">
           <div>
-            ${nombreCampoGrupo ? `<span class="text-[10px] font-bold text-amber-300 block mb-0.5">🏡 ${nombreCampoGrupo}</span>` : ""}
+            ${nombreCampoGrupo ? `<span class="text-[10px] font-bold text-rose-300 block mb-0.5">🏡 ${nombreCampoGrupo}</span>` : ""}
             <h4 class="text-base font-bold text-slate-100 group-hover:text-sky-400 transition truncate">
               ${nombre}
             </h4>
@@ -639,22 +619,33 @@ function renderizarVistaDeCampo() {
   const contenedor = document.getElementById("contenedorVistaCampos");
   const contador = document.getElementById("contadorParcelas");
   const lblResumenArea = document.getElementById("lblResumenAreaCampo");
-  const selFiltro = document.getElementById("selFiltroCampoGeneral");
-  const filtroCampo = selFiltro ? selFiltro.value : "TODOS";
 
   if (!contenedor) return;
 
-  const parcelasFiltradas = parcelasCache.filter((p) => {
+  const camposDisponibles = obtenerCamposDisponibles();
+  const parcelasSinCampo = obtenerParcelasSinCampo();
+
+  // Determinar qué se muestra en el mapa según la selección inferior
+  let campoObjetivo = null;
+  if (seccionDesplegada === "CAMPOS") {
+    campoObjetivo = campoActivoDesplegado || camposDisponibles[0] || null;
+  }
+
+  const parcelasEnMapa = parcelasCache.filter((p) => {
     const cg = (p.campo_general || "").trim();
-    if (filtroCampo === "TODOS") return true;
-    if (filtroCampo === "__SIN_CAMPO__") return cg === "";
-    return cg === filtroCampo;
+    if (seccionDesplegada === "PARCELAS") {
+      return cg === "";
+    }
+    if (seccionDesplegada === "CAMPOS" && campoObjetivo) {
+      return normalizarTexto(cg) === normalizarTexto(campoObjetivo);
+    }
+    return true;
   });
 
   if (contador) {
     contador.innerText =
-      parcelasFiltradas.length +
-      (parcelasFiltradas.length === 1 ? " parcela" : " parcelas");
+      parcelasEnMapa.length +
+      (parcelasEnMapa.length === 1 ? " parcela" : " parcelas");
   }
 
   if (capaPoligonosGuardados) {
@@ -664,78 +655,79 @@ function renderizarVistaDeCampo() {
   const todosLosPuntos = [];
   let areaGlobalM2 = 0;
 
-  // 1. Dibujar contornos de Campos en el mapa satelital
-  const camposDisponibles = obtenerCamposDisponibles();
-  const puntosPorCampo = new Map();
+  // 1. Dibujar contornos de Campos en ROJO (#ef4444) en el mapa satelital
+  if (seccionDesplegada !== "PARCELAS") {
+    const puntosPorCampo = new Map();
 
-  parcelasCache.forEach((p) => {
-    const cg = (p.campo_general || "").trim();
-    if (!cg) return;
-    const clave = cg.toLowerCase();
-    if (!puntosPorCampo.has(clave)) puntosPorCampo.set(clave, []);
-    const pol = parsearPoligonoGuardado(p.poligono_json);
-    if (pol.length >= 3) {
-      pol.forEach((pt) => puntosPorCampo.get(clave).push(pt));
-    } else if (
-      p.latitud !== null &&
-      p.longitud !== null &&
-      p.latitud !== "" &&
-      p.longitud !== ""
-    ) {
-      puntosPorCampo
-        .get(clave)
-        .push([parseFloat(p.latitud), parseFloat(p.longitud)]);
-    }
-  });
-
-  camposDisponibles.forEach((nombreCampo) => {
-    if (
-      filtroCampo !== "TODOS" &&
-      filtroCampo !== "__SIN_CAMPO__" &&
-      nombreCampo !== filtroCampo
-    ) {
-      return;
-    }
-
-    const clave = nombreCampo.toLowerCase();
-    const contornoGuardado = contornosCamposGuardados.find(
-      (c) => (c.nombre || "").trim().toLowerCase() === clave,
-    );
-    let polCampo =
-      contornoGuardado &&
-      Array.isArray(contornoGuardado.poligono) &&
-      contornoGuardado.poligono.length >= 3
-        ? contornoGuardado.poligono
-        : null;
-
-    if (!polCampo) {
-      const pts = puntosPorCampo.get(clave) || [];
-      if (pts.length >= 3) {
-        polCampo = calcularEnvolturaConvexa(pts);
+    parcelasCache.forEach((p) => {
+      const cg = (p.campo_general || "").trim();
+      if (!cg) return;
+      const clave = normalizarTexto(cg);
+      if (!puntosPorCampo.has(clave)) puntosPorCampo.set(clave, []);
+      const pol = parsearPoligonoGuardado(p.poligono_json);
+      if (pol.length >= 3) {
+        pol.forEach((pt) => puntosPorCampo.get(clave).push(pt));
+      } else if (
+        p.latitud !== null &&
+        p.longitud !== null &&
+        p.latitud !== "" &&
+        p.longitud !== ""
+      ) {
+        puntosPorCampo
+          .get(clave)
+          .push([parseFloat(p.latitud), parseFloat(p.longitud)]);
       }
-    }
+    });
 
-    if (polCampo && polCampo.length >= 3 && capaPoligonosGuardados) {
-      polCampo.forEach((pt) => todosLosPuntos.push(pt));
-      const parcelasDelCampo = parcelasCache.filter(
-        (p) => (p.campo_general || "").trim().toLowerCase() === clave,
+    camposDisponibles.forEach((nombreCampo) => {
+      if (
+        seccionDesplegada === "CAMPOS" &&
+        campoObjetivo &&
+        normalizarTexto(nombreCampo) !== normalizarTexto(campoObjetivo)
+      ) {
+        return;
+      }
+
+      const clave = normalizarTexto(nombreCampo);
+      const contornoGuardado = contornosCamposGuardados.find(
+        (c) => normalizarTexto(c.nombre) === clave,
       );
-      const layerCampo = L.polygon(polCampo, {
-        color: "#f59e0b",
-        weight: 2.5,
-        dashArray: "8, 6",
-        fillColor: "#f59e0b",
-        fillOpacity: 0.05,
-      }).addTo(capaPoligonosGuardados);
+      let polCampo =
+        contornoGuardado &&
+        Array.isArray(contornoGuardado.poligono) &&
+        contornoGuardado.poligono.length >= 3
+          ? contornoGuardado.poligono
+          : null;
 
-      layerCampo.bindPopup(
-        `<b>🏡 Campo: ${nombreCampo}</b><br>Parcelas registradas: ${parcelasDelCampo.length}`,
-      );
-    }
-  });
+      if (!polCampo) {
+        const pts = puntosPorCampo.get(clave) || [];
+        if (pts.length >= 3) {
+          polCampo = calcularEnvolturaConvexa(pts);
+        }
+      }
 
-  // 2. Dibujar todas las parcelas filtradas en el mapa satelital
-  parcelasFiltradas.forEach((p) => {
+      if (polCampo && polCampo.length >= 3 && capaPoligonosGuardados) {
+        polCampo.forEach((pt) => todosLosPuntos.push(pt));
+        const parcelasDelCampo = parcelasCache.filter(
+          (p) => normalizarTexto(p.campo_general) === clave,
+        );
+        const layerCampo = L.polygon(polCampo, {
+          color: "#ef4444",
+          weight: 2.5,
+          dashArray: "7, 6",
+          fillColor: "#ef4444",
+          fillOpacity: 0.05,
+        }).addTo(capaPoligonosGuardados);
+
+        layerCampo.bindPopup(
+          `<b>🏡 Campo: ${nombreCampo}</b><br>Parcelas registradas: ${parcelasDelCampo.length}`,
+        );
+      }
+    });
+  }
+
+  // 2. Dibujar parcelas correspondientes en el mapa satelital
+  parcelasEnMapa.forEach((p) => {
     const nombre = p.parcela || p.nombre || "Parcela #" + p.id;
     const cultivo = p.cultivo || "General";
     const cg = (p.campo_general || "").trim();
@@ -765,7 +757,7 @@ function renderizarVistaDeCampo() {
 
       polyLayer.bindPopup(`
         <div style="min-width:165px;">
-          ${cg ? `<div style="font-size:10px;color:#b45309;font-weight:700;">🏡 ${cg}</div>` : ""}
+          ${cg ? `<div style="font-size:10px;color:#b91c1c;font-weight:700;">🏡 ${cg}</div>` : ""}
           <div style="font-size:13px;font-weight:800;color:#0f172a;">#${p.id} ${nombre}</div>
           <div style="font-size:11px;color:#334155;">🌱 ${cultivo} • ${Math.round(areaM2).toLocaleString()} m²</div>
           <button onclick="verDetalleParcela(${p.id})" style="margin-top:6px;width:100%;background:#0284c7;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;">
@@ -827,9 +819,14 @@ function renderizarVistaDeCampo() {
     return;
   }
 
-  // 3. Botón desplegable inferior: Campos (arriba) y Parcelas sin campo (debajo)
-  const parcelasSinCampo = obtenerParcelasSinCampo();
+  // 3. Desplegable inferior: Seleccionar visualización / Campos / Parcelas / Ver todo
   const tieneParcelasSinCampo = parcelasSinCampo.length > 0;
+  const etiquetaBoton =
+    seccionDesplegada === "CAMPOS"
+      ? `Visualizando: Campos${campoObjetivo ? ` (${campoObjetivo})` : ""}`
+      : seccionDesplegada === "PARCELAS"
+        ? "Visualizando: Parcelas (independientes)"
+        : "Seleccionar visualización (Ver todo)";
 
   let htmlDesplegable = `
     <div class="bg-slate-800/70 border border-slate-700 rounded-2xl p-4 md:p-5 space-y-4">
@@ -840,26 +837,32 @@ function renderizarVistaDeCampo() {
           class="bg-slate-900 hover:bg-slate-700 text-slate-100 border border-slate-600 text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow"
         >
           <span>📂</span>
-          <span>${
-            seccionDesplegada === "CAMPOS"
-              ? `Visualizando: Campos${campoActivoDesplegado ? ` (${campoActivoDesplegado})` : ""}`
-              : seccionDesplegada === "PARCELAS"
-                ? "Visualizando: Parcelas (sin campo)"
-                : "Seleccionar visualización"
-          }</span>
+          <span>${etiquetaBoton}</span>
           <span>${menuOpcionesAbierto ? "▲" : "▼"}</span>
         </button>
 
         ${
           menuOpcionesAbierto
             ? `
-          <div class="mt-2 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-20">
+          <div class="mt-2 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-20">
+            <button
+              type="button"
+              onclick="seleccionarOpcionVisualizar('VER_TODO')"
+              class="w-full text-left px-4 py-3 text-xs font-bold flex items-center justify-between hover:bg-slate-800 transition ${
+                seccionDesplegada === null
+                  ? "text-sky-300 bg-slate-800/80"
+                  : "text-slate-200"
+              }"
+            >
+              <span>🌐 Ver todo (solo mapa)</span>
+              <span class="text-[11px] text-slate-400">Todo</span>
+            </button>
             <button
               type="button"
               onclick="seleccionarOpcionVisualizar('CAMPOS')"
-              class="w-full text-left px-4 py-3 text-xs font-bold flex items-center justify-between hover:bg-slate-800 transition ${
+              class="w-full text-left px-4 py-3 text-xs font-bold flex items-center justify-between border-t border-slate-800 hover:bg-slate-800 transition ${
                 seccionDesplegada === "CAMPOS"
-                  ? "text-amber-300 bg-slate-800/80"
+                  ? "text-rose-300 bg-slate-800/80"
                   : "text-slate-200"
               }"
             >
@@ -896,19 +899,18 @@ function renderizarVistaDeCampo() {
       .map((nombreCampo) => {
         const cant = parcelasCache.filter(
           (p) =>
-            (p.campo_general || "").trim().toLowerCase() ===
-            nombreCampo.toLowerCase(),
+            normalizarTexto(p.campo_general) === normalizarTexto(nombreCampo),
         ).length;
         const activo =
-          campoActivoDesplegado &&
-          campoActivoDesplegado.toLowerCase() === nombreCampo.toLowerCase();
+          campoObjetivo &&
+          normalizarTexto(campoObjetivo) === normalizarTexto(nombreCampo);
         return `
           <button
             type="button"
             onclick="seleccionarCampoDesplegado('${nombreCampo.replace(/'/g, "\\'")}')"
             class="px-3.5 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-2 ${
               activo
-                ? "bg-amber-500/20 text-amber-300 border-amber-400/60"
+                ? "bg-rose-500/20 text-rose-300 border-rose-400/60"
                 : "bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-700"
             }"
           >
@@ -919,30 +921,31 @@ function renderizarVistaDeCampo() {
       })
       .join("");
 
-    const campoSeleccionado =
-      campoActivoDesplegado || camposDisponibles[0] || "";
-    const parcelasDelCampo = parcelasCache.filter(
-      (p) =>
-        (p.campo_general || "").trim().toLowerCase() ===
-        campoSeleccionado.toLowerCase(),
-    );
+    const parcelasDelCampo = campoObjetivo
+      ? parcelasCache.filter(
+          (p) =>
+            normalizarTexto(p.campo_general) === normalizarTexto(campoObjetivo),
+        )
+      : [];
 
     const tarjetasCampoHtml =
       parcelasDelCampo.length > 0
         ? `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pt-2">
-            ${parcelasDelCampo.map((p) => construirTarjetaParcelaHtml(p, campoSeleccionado)).join("")}
+            ${parcelasDelCampo.map((p) => construirTarjetaParcelaHtml(p, campoObjetivo)).join("")}
           </div>`
-        : `<div class="bg-slate-900/70 border border-slate-700/80 rounded-xl p-5 text-center text-xs text-slate-400">
-            El campo <strong>${campoSeleccionado}</strong> aún no tiene parcelas registradas.
-          </div>`;
+        : campoObjetivo
+          ? `<div class="bg-slate-900/70 border border-slate-700/80 rounded-xl p-5 text-center text-xs text-slate-400">
+              El campo <strong>${campoObjetivo}</strong> aún no tiene parcelas registradas.
+            </div>`
+          : "";
 
     htmlDesplegable += `
       <div class="space-y-3 pt-2 border-t border-slate-700/70">
-        <div class="text-xs font-bold text-amber-300">Campos registrados:</div>
+        <div class="text-xs font-bold text-rose-300">Campos registrados:</div>
         <div class="flex flex-wrap gap-2">
           ${listaBotonesCampos || '<span class="text-xs text-slate-400">No hay campos creados.</span>'}
         </div>
-        ${campoSeleccionado ? tarjetasCampoHtml : ""}
+        ${tarjetasCampoHtml}
       </div>
     `;
   } else if (seccionDesplegada === "PARCELAS" && tieneParcelasSinCampo) {
