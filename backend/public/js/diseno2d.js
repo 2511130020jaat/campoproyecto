@@ -1,4 +1,4 @@
-let parcelasDisponibles = [];
+﻿let parcelasDisponibles = [];
 let nodosPlano = [];
 let contornoMetros = [];
 let herramientaActiva = "MOVER";
@@ -21,6 +21,15 @@ let panCanvasY = 30;
 let escalaBasePxPorMetro = 6.0;
 let arrastrandoFondo = false;
 let inicioArrastreFondo = { x: 0, y: 0 };
+
+// Vista del lienzo inferior en ASIR: "2d" o "3d"
+let modoVistaEnAsir = "2d";
+
+// Integración ASIR IO (puerto 5000 / 5173)
+const ASIR_IO_WEB_URL = "http://localhost:5173";
+const ASIR_IO_API_URL = "http://localhost:5000";
+let esquemaFinalParcelaActual = null;
+let enviandoParcelaAsirIo = false;
 
 const ANCHO_REGLA_IZQ = 38;
 const ALTO_REGLA_SUP = 24;
@@ -58,6 +67,7 @@ const ESTILOS_NODO = {
 document.addEventListener("DOMContentLoaded", () => {
   ajustarResolucionCanvas();
   inicializarEventosCanvas();
+  inicializarIntegracionAsirIo();
   cargarParcelasDiseno();
   window.addEventListener("resize", () => {
     ajustarResolucionCanvas();
@@ -65,13 +75,379 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+function obtenerUsuarioActivoAsir() {
+  if (typeof usuarioSesion !== "undefined" && usuarioSesion?.id) {
+    return usuarioSesion;
+  }
+  try {
+    const raw = localStorage.getItem("usuario_asir");
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && parsed.id ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function obtenerParcelaSeleccionadaObj() {
+  const idParcela = document.getElementById("selParcelaDiseno")?.value;
+  if (!idParcela) return null;
+  return (
+    parcelasDisponibles.find((p) => String(p.id) === String(idParcela)) || null
+  );
+}
+
+function escaparHtmlSimple(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&")
+    .replace(/</g, "<")
+    .replace(/>/g, ">")
+    .replace(/"/g, "'");
+}
+
+function renderizarResultadoFinalParcela(estadoHtml) {
+  const cont = document.getElementById("resultadoFinalAsirIo");
+  if (!cont) return;
+  cont.innerHTML = estadoHtml;
+}
+
+function cambiarVistaEnAsir(modo) {
+  modoVistaEnAsir = modo === "3d" ? "3d" : "2d";
+  sincronizarResultadoFinalParcelaIo();
+  redibujarLienzo();
+}
+
+async function sincronizarResultadoFinalParcelaIo() {
+  const estadoEl = document.getElementById("asirIoEstadoUsuario");
+  const enlaceEl = document.getElementById("enlaceAbrirAsirIo");
+  const usuario = obtenerUsuarioActivoAsir();
+  const parcelaObj = obtenerParcelaSeleccionadaObj();
+
+  esquemaFinalParcelaActual = null;
+
+  if (enlaceEl) {
+    const query = new URLSearchParams();
+    if (parcelaObj?.id) query.set("id_parcela", String(parcelaObj.id));
+    if (usuario?.id) {
+      query.set("id_usuario", String(usuario.id));
+      if (usuario.nombre) query.set("usuario_nombre", String(usuario.nombre));
+      if (usuario.correo) query.set("usuario_correo", String(usuario.correo));
+    }
+    enlaceEl.href = query.toString()
+      ? `${ASIR_IO_WEB_URL}/?${query.toString()}`
+      : ASIR_IO_WEB_URL;
+  }
+
+  if (!usuario || !usuario.id) {
+    if (estadoEl) {
+      estadoEl.textContent =
+        "Sin sesión activa en ASIR — inicia sesión para enviar parcelas.";
+    }
+    renderizarResultadoFinalParcela(
+      `<span>Inicia sesión para ver el resultado final de esta parcela en 2D / 3D.</span>`,
+    );
+    return;
+  }
+
+  const nombreMostrar =
+    usuario.nombre || usuario.correo || usuario.email || `ID ${usuario.id}`;
+  if (estadoEl) {
+    estadoEl.textContent = `Usuario: ${nombreMostrar}`;
+  }
+
+  if (!parcelaObj || !parcelaObj.id) {
+    renderizarResultadoFinalParcela(
+      `<span>Selecciona una parcela para ver su resultado final.</span>`,
+    );
+    return;
+  }
+
+  try {
+    const url = `${ASIR_IO_API_URL}/api/esquemas?id_usuario=${encodeURIComponent(usuario.id)}&id_parcela=${encodeURIComponent(parcelaObj.id)}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    const clase2d =
+      modoVistaEnAsir === "2d"
+        ? "bg-blue-700 text-white ring-2 ring-blue-400/50"
+        : "bg-white/90 hover:bg-white text-blue-800 border border-blue-300";
+    const clase3d =
+      modoVistaEnAsir === "3d"
+        ? "bg-indigo-700 text-white ring-2 ring-indigo-400/50"
+        : "bg-white/90 hover:bg-white text-indigo-800 border border-indigo-300";
+
+    const botonesVistaHtml = `
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button
+          type="button"
+          onclick="cambiarVistaEnAsir('2d')"
+          class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${clase2d}"
+        >
+          2D
+        </button>
+        <button
+          type="button"
+          onclick="cambiarVistaEnAsir('3d')"
+          class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${clase3d}"
+        >
+          3D
+        </button>
+      </div>
+    `;
+
+    if (!resp.ok || !data.ok) {
+      renderizarResultadoFinalParcela(`
+        <div class="flex items-center justify-between gap-2">
+          <span>No se pudo consultar el resultado final en ASIR IO.</span>
+          ${botonesVistaHtml}
+        </div>
+      `);
+      return;
+    }
+
+    const esquemas = Array.isArray(data.esquemas) ? data.esquemas : [];
+    if (esquemas.length === 0) {
+      renderizarResultadoFinalParcela(`
+        <div class="flex items-center justify-between gap-2">
+          <span class="truncate">Sin resultado final aún en ASIR IO.</span>
+          ${botonesVistaHtml}
+        </div>
+      `);
+      return;
+    }
+
+    const finalPlano = esquemas[0];
+    esquemaFinalParcelaActual = finalPlano;
+    const nombreSeguro = escaparHtmlSimple(finalPlano.nombre || finalPlano.id);
+
+    renderizarResultadoFinalParcela(`
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-semibold truncate">Resultado final: ${nombreSeguro}</span>
+        ${botonesVistaHtml}
+      </div>
+    `);
+  } catch {
+    renderizarResultadoFinalParcela(
+      `<span>ASIR IO (puerto 5000) no disponible.</span>`,
+    );
+  }
+}
+
+function normalizarPoligonoLatLng(poligonoRaw) {
+  if (!Array.isArray(poligonoRaw)) return [];
+  return poligonoRaw
+    .map((pt) => {
+      if (Array.isArray(pt) && pt.length >= 2) {
+        const lat = Number(pt[0]);
+        const lng = Number(pt[1]);
+        return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
+      }
+      if (pt && typeof pt === "object") {
+        const lat = Number(pt.lat ?? pt.latitude);
+        const lng = Number(pt.lng ?? pt.lon ?? pt.longitude);
+        return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function construirElementosInicialesParaAsirIo(parcelaObj, poligonoRaw) {
+  const escalaPxPorMetro = 20;
+  const margenPx = 80;
+  const poligonoLimpio = normalizarPoligonoLatLng(poligonoRaw);
+
+  let anchoM = Number(document.getElementById("inpAnchoMetros")?.value);
+  let altoM = Number(document.getElementById("inpAltoMetros")?.value);
+  const areaParcela = Number(parcelaObj?.area_m2);
+
+  let puntosPx = [];
+
+  if (poligonoLimpio.length >= 3) {
+    const proy = proyectarContornoAMetros(poligonoLimpio);
+    if (Number.isFinite(proy.anchoTotal) && proy.anchoTotal > 0) {
+      anchoM = proy.anchoTotal;
+    }
+    if (Number.isFinite(proy.altoTotal) && proy.altoTotal > 0) {
+      altoM = proy.altoTotal;
+    }
+
+    puntosPx = proy.puntos.flatMap((pt) => {
+      const xM = Number(pt.x);
+      const yM = Number(pt.y);
+      if (!Number.isFinite(xM) || !Number.isFinite(yM)) return [];
+      return [
+        Math.round(margenPx + xM * escalaPxPorMetro),
+        Math.round(margenPx + yM * escalaPxPorMetro),
+      ];
+    });
+  }
+
+  if (!Number.isFinite(anchoM) || anchoM <= 0) {
+    anchoM =
+      Number.isFinite(areaParcela) && areaParcela > 0
+        ? Math.round(Math.sqrt(areaParcela))
+        : 100;
+  }
+  if (!Number.isFinite(altoM) || altoM <= 0) {
+    altoM =
+      Number.isFinite(areaParcela) && areaParcela > 0
+        ? Math.round(areaParcela / anchoM)
+        : 80;
+  }
+
+  if (puntosPx.length < 6) {
+    const wPx = Math.round(anchoM * escalaPxPorMetro);
+    const hPx = Math.round(altoM * escalaPxPorMetro);
+    puntosPx = [
+      margenPx,
+      margenPx,
+      margenPx + wPx,
+      margenPx,
+      margenPx + wPx,
+      margenPx + hPx,
+      margenPx,
+      margenPx + hPx,
+    ];
+  }
+
+  const areaFinal =
+    Number.isFinite(areaParcela) && areaParcela > 0
+      ? +areaParcela.toFixed(2)
+      : +(anchoM * altoM).toFixed(2);
+
+  return [
+    {
+      id: `parcela_asir_${parcelaObj.id}_${Date.now()}`,
+      id_parcela: String(parcelaObj.id),
+      tipo: "parcela",
+      nombre:
+        parcelaObj.parcela || parcelaObj.nombre || `Parcela #${parcelaObj.id}`,
+      cultivo: parcelaObj.cultivo || "General",
+      puntos: puntosPx,
+      anchoMetros: +anchoM.toFixed(2),
+      altoMetros: +altoM.toFixed(2),
+      areaM2: areaFinal,
+    },
+  ];
+}
+
+async function enviarParcelaSeleccionadaAAsirIo() {
+  if (enviandoParcelaAsirIo) return;
+
+  const usuario = obtenerUsuarioActivoAsir();
+  if (!usuario || !usuario.id) {
+    alert("Inicia sesión primero en ASIR para enviar la parcela a ASIR IO.");
+    return;
+  }
+
+  const parcelaObj = obtenerParcelaSeleccionadaObj();
+  if (!parcelaObj || !parcelaObj.id) {
+    alert("Selecciona una parcela antes de enviarla a ASIR IO.");
+    return;
+  }
+
+  let poligonoRaw = [];
+  if (parcelaObj.poligono_json) {
+    try {
+      poligonoRaw =
+        typeof parcelaObj.poligono_json === "string"
+          ? JSON.parse(parcelaObj.poligono_json)
+          : parcelaObj.poligono_json;
+    } catch {
+      poligonoRaw = [];
+    }
+  }
+
+  const nombreParcela =
+    parcelaObj.parcela || parcelaObj.nombre || `Parcela #${parcelaObj.id}`;
+  const elementosParcela = construirElementosInicialesParaAsirIo(
+    parcelaObj,
+    poligonoRaw,
+  );
+  const elParcela = elementosParcela[0];
+
+  const btnEnviar = document.getElementById("btnEnviarParcelaAsirIo");
+  enviandoParcelaAsirIo = true;
+  if (btnEnviar) {
+    btnEnviar.disabled = true;
+    btnEnviar.textContent = "⏳ Enviando...";
+  }
+
+  try {
+    const payload = {
+      id: esquemaFinalParcelaActual?.id || null,
+      id_usuario: usuario.id,
+      id_parcela: String(parcelaObj.id),
+      nombre: `${nombreParcela} — ASIR IO`,
+      elementos: elementosParcela,
+      resumen: {
+        parcelaMarcada: {
+          id: parcelaObj.id,
+          nombre: nombreParcela,
+          anchoMetros: elParcela.anchoMetros,
+          altoMetros: elParcela.altoMetros,
+          areaM2: elParcela.areaM2,
+          poligono: normalizarPoligonoLatLng(poligonoRaw),
+        },
+      },
+    };
+
+    const resp = await fetch(`${ASIR_IO_API_URL}/api/esquemas`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok || !data.ok || !data.id) {
+      alert(
+        "❌ No se pudo enviar la parcela a ASIR IO: " +
+          (data.error || "Error del servidor IO"),
+      );
+      return;
+    }
+
+    await sincronizarResultadoFinalParcelaIo();
+
+    const params = new URLSearchParams({
+      plano: String(data.id),
+      id_parcela: String(parcelaObj.id),
+      id_usuario: String(usuario.id),
+      vista: "2d",
+    });
+    if (usuario.nombre) params.set("usuario_nombre", String(usuario.nombre));
+    if (usuario.correo) params.set("usuario_correo", String(usuario.correo));
+
+    window.open(
+      `${ASIR_IO_WEB_URL}/?${params.toString()}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  } catch {
+    alert(
+      "⚠️ No se pudo conectar con ASIR IO (puerto 5000). Verifica que el servidor esté encendido.",
+    );
+  } finally {
+    enviandoParcelaAsirIo = false;
+    if (btnEnviar) {
+      btnEnviar.disabled = false;
+      btnEnviar.textContent = "🚀 Enviar parcela a ASIR IO";
+    }
+  }
+}
+
+function inicializarIntegracionAsirIo() {
+  const btnEnviar = document.getElementById("btnEnviarParcelaAsirIo");
+  btnEnviar?.addEventListener("click", enviarParcelaSeleccionadaAAsirIo);
+}
+
 function ajustarResolucionCanvas() {
   const contenedor = document.getElementById("contenedorCanvas2d");
   const canvas = document.getElementById("canvasDiseno2d");
   if (!contenedor || !canvas) return;
 
   const w = contenedor.clientWidth || 900;
-  const h = contenedor.clientHeight || 560;
+  const h = contenedor.clientHeight || 540;
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
     canvas.height = h;
@@ -80,8 +456,14 @@ function ajustarResolucionCanvas() {
 
 async function cargarParcelasDiseno() {
   const select = document.getElementById("selParcelaDiseno");
+  const usuario = obtenerUsuarioActivoAsir();
+  if (!usuario || !usuario.id) {
+    await sincronizarResultadoFinalParcelaIo();
+    return;
+  }
+
   try {
-    const res = await fetch("/api/parcelas?id_usuario=" + usuarioSesion.id);
+    const res = await fetch("/api/parcelas?id_usuario=" + usuario.id);
     parcelasDisponibles = await res.json();
 
     if (!parcelasDisponibles || parcelasDisponibles.length === 0) {
@@ -95,6 +477,7 @@ async function cargarParcelasDiseno() {
       aplicarOrtofotoEnUI(null);
       resetearVistaCanvas(false);
       recalcularYRedibujar();
+      await sincronizarResultadoFinalParcelaIo();
       return;
     }
 
@@ -120,16 +503,17 @@ async function cargarParcelasDiseno() {
 }
 
 function proyectarContornoAMetros(poligonoLatLng) {
-  if (!Array.isArray(poligonoLatLng) || poligonoLatLng.length < 3) {
+  const limpios = normalizarPoligonoLatLng(poligonoLatLng);
+  if (limpios.length < 3) {
     return { puntos: [], anchoTotal: 100, altoTotal: 80, origen: null };
   }
 
-  const lat0 = poligonoLatLng[0][0];
-  const lng0 = poligonoLatLng[0][1];
+  const lat0 = limpios[0][0];
+  const lng0 = limpios[0][1];
   const mPorLat = 111132.92;
   const mPorLng = 111412.84 * Math.cos((lat0 * Math.PI) / 180);
 
-  const crudos = poligonoLatLng.map((p) => ({
+  const crudos = limpios.map((p) => ({
     x: (p[1] - lng0) * mPorLng,
     y: (p[0] - lat0) * mPorLat,
   }));
@@ -178,14 +562,15 @@ function generarFondoSatelitalParcela(parcelaObj, poligonoRaw, proyeccion) {
   sateliteAutoBoundsM = null;
   if (!parcelaObj) return;
 
+  const poligonoLimpio = normalizarPoligonoLatLng(poligonoRaw);
   let minLat, maxLat, minLng, maxLng;
 
-  if (Array.isArray(poligonoRaw) && poligonoRaw.length >= 3) {
+  if (poligonoLimpio.length >= 3) {
     minLat = Infinity;
     maxLat = -Infinity;
     minLng = Infinity;
     maxLng = -Infinity;
-    poligonoRaw.forEach((pt) => {
+    poligonoLimpio.forEach((pt) => {
       if (pt[0] < minLat) minLat = pt[0];
       if (pt[0] > maxLat) maxLat = pt[0];
       if (pt[1] < minLng) minLng = pt[1];
@@ -309,32 +694,38 @@ function cambiarModoFondo(nuevoModo) {
   const txtBtnSubir = document.getElementById("txtBtnSubirOrto");
 
   if (nuevoModo === "NINGUNO") {
-    panelSubir.classList.add("hidden");
-    panelControles.classList.add("hidden");
-    controlesManuales.classList.add("hidden");
+    panelSubir?.classList.add("hidden");
+    panelControles?.classList.add("hidden");
+    controlesManuales?.classList.add("hidden");
   } else if (nuevoModo === "SATELITE") {
-    panelSubir.classList.add("hidden");
-    panelControles.classList.remove("hidden");
-    controlesManuales.classList.add("hidden");
+    panelSubir?.classList.add("hidden");
+    panelControles?.classList.remove("hidden");
+    controlesManuales?.classList.add("hidden");
 
     const opPct = Math.round(opacidadSateliteAuto * 100);
-    document.getElementById("rngOpacidadOrto").value = opPct;
-    document.getElementById("valOpacidadOrto").innerText = opPct + "%";
+    const rng = document.getElementById("rngOpacidadOrto");
+    const lbl = document.getElementById("valOpacidadOrto");
+    if (rng) rng.value = opPct;
+    if (lbl) lbl.innerText = opPct + "%";
   } else if (nuevoModo === "ORTOFOTO") {
-    panelSubir.classList.remove("hidden");
-    txtBtnSubir.innerText = ortofotoImgObj
-      ? "Cambiar Ortofoto / Captura HD"
-      : "Subir Ortofoto / Captura HD";
+    panelSubir?.classList.remove("hidden");
+    if (txtBtnSubir) {
+      txtBtnSubir.innerText = ortofotoImgObj
+        ? "Cambiar Ortofoto / Captura HD"
+        : "Subir Ortofoto / Captura HD";
+    }
 
     if (ortofotoConfig && ortofotoImgObj) {
-      panelControles.classList.remove("hidden");
-      controlesManuales.classList.remove("hidden");
+      panelControles?.classList.remove("hidden");
+      controlesManuales?.classList.remove("hidden");
       const opPct = Math.round(ortofotoConfig.opacidad * 100);
-      document.getElementById("rngOpacidadOrto").value = opPct;
-      document.getElementById("valOpacidadOrto").innerText = opPct + "%";
+      const rng = document.getElementById("rngOpacidadOrto");
+      const lbl = document.getElementById("valOpacidadOrto");
+      if (rng) rng.value = opPct;
+      if (lbl) lbl.innerText = opPct + "%";
     } else {
-      panelControles.classList.add("hidden");
-      controlesManuales.classList.add("hidden");
+      panelControles?.classList.add("hidden");
+      controlesManuales?.classList.add("hidden");
     }
   }
 
@@ -360,18 +751,19 @@ function aplicarOrtofotoEnUI(config) {
     offsetY: config.offsetY ?? 0,
   };
 
-  document.getElementById("rngEscalaOrto").value = Math.round(
-    ortofotoConfig.escala * 100,
-  );
-  document.getElementById("valEscalaOrto").innerText =
-    Math.round(ortofotoConfig.escala * 100) + "%";
+  const rngEsc = document.getElementById("rngEscalaOrto");
+  const valEsc = document.getElementById("valEscalaOrto");
+  const rngRot = document.getElementById("rngRotacionOrto");
+  const valRot = document.getElementById("valRotacionOrto");
+  const inpOffX = document.getElementById("inpOffsetXOrto");
+  const inpOffY = document.getElementById("inpOffsetYOrto");
 
-  document.getElementById("rngRotacionOrto").value = ortofotoConfig.rotacion;
-  document.getElementById("valRotacionOrto").innerText =
-    ortofotoConfig.rotacion + "°";
-
-  document.getElementById("inpOffsetXOrto").value = ortofotoConfig.offsetX;
-  document.getElementById("inpOffsetYOrto").value = ortofotoConfig.offsetY;
+  if (rngEsc) rngEsc.value = Math.round(ortofotoConfig.escala * 100);
+  if (valEsc) valEsc.innerText = Math.round(ortofotoConfig.escala * 100) + "%";
+  if (rngRot) rngRot.value = ortofotoConfig.rotacion;
+  if (valRot) valRot.innerText = ortofotoConfig.rotacion + "°";
+  if (inpOffX) inpOffX.value = ortofotoConfig.offsetX;
+  if (inpOffY) inpOffY.value = ortofotoConfig.offsetY;
 
   const img = new Image();
   img.onload = () => {
@@ -428,7 +820,8 @@ function cargarOrtofotoDesdeArchivo(evento) {
 function actualizarCalibracionOrtofoto() {
   const opPct =
     parseInt(document.getElementById("rngOpacidadOrto").value, 10) || 65;
-  document.getElementById("valOpacidadOrto").innerText = opPct + "%";
+  const valOp = document.getElementById("valOpacidadOrto");
+  if (valOp) valOp.innerText = opPct + "%";
 
   if (modoFondo === "SATELITE") {
     opacidadSateliteAuto = opPct / 100;
@@ -439,11 +832,13 @@ function actualizarCalibracionOrtofoto() {
   if (!ortofotoConfig) return;
 
   const escPct =
-    parseInt(document.getElementById("rngEscalaOrto").value, 10) || 100;
+    parseInt(document.getElementById("rngEscalaOrto")?.value, 10) || 100;
   const rot =
-    parseInt(document.getElementById("rngRotacionOrto").value, 10) || 0;
-  const offX = parseFloat(document.getElementById("inpOffsetXOrto").value) || 0;
-  const offY = parseFloat(document.getElementById("inpOffsetYOrto").value) || 0;
+    parseInt(document.getElementById("rngRotacionOrto")?.value, 10) || 0;
+  const offX =
+    parseFloat(document.getElementById("inpOffsetXOrto")?.value) || 0;
+  const offY =
+    parseFloat(document.getElementById("inpOffsetYOrto")?.value) || 0;
 
   ortofotoConfig.opacidad = opPct / 100;
   ortofotoConfig.escala = escPct / 100;
@@ -451,15 +846,20 @@ function actualizarCalibracionOrtofoto() {
   ortofotoConfig.offsetX = offX;
   ortofotoConfig.offsetY = offY;
 
-  document.getElementById("valEscalaOrto").innerText = escPct + "%";
-  document.getElementById("valRotacionOrto").innerText = rot + "°";
+  const valEsc = document.getElementById("valEscalaOrto");
+  const valRot = document.getElementById("valRotacionOrto");
+  if (valEsc) valEsc.innerText = escPct + "%";
+  if (valRot) valRot.innerText = rot + "°";
 
   redibujarLienzo();
 }
 
 async function cargarDisenoParcela() {
   const idParcela = document.getElementById("selParcelaDiseno").value;
-  if (!idParcela) return;
+  if (!idParcela) {
+    await sincronizarResultadoFinalParcelaIo();
+    return;
+  }
 
   const parcelaObj = parcelasDisponibles.find((p) => p.id == idParcela);
   let poligonoRaw = [];
@@ -469,7 +869,7 @@ async function cargarDisenoParcela() {
         typeof parcelaObj.poligono_json === "string"
           ? JSON.parse(parcelaObj.poligono_json)
           : parcelaObj.poligono_json;
-    } catch (e) {
+    } catch {
       poligonoRaw = [];
     }
   }
@@ -506,6 +906,7 @@ async function cargarDisenoParcela() {
 
     resetearVistaCanvas(false);
     recalcularYRedibujar();
+    await sincronizarResultadoFinalParcelaIo();
   } catch (err) {
     console.error("Error cargando plano 2D:", err);
   }
@@ -562,7 +963,7 @@ async function guardarDisenoActual() {
     } else {
       alert("❌ Error: " + (data.error || "No se pudo guardar el plano"));
     }
-  } catch (err) {
+  } catch {
     alert("Error de conexión al guardar el diseño 2D.");
   }
 }
@@ -576,14 +977,14 @@ function seleccionarHerramienta(herramienta) {
     const esActiva = btn.dataset.tool === herramienta;
     if (esActiva) {
       btn.className =
-        "tool-btn bg-sky-600 text-white font-bold py-2.5 px-2 rounded-xl border border-sky-400/40 transition flex items-center justify-center gap-1.5 shadow";
+        "tool-btn bg-sky-600 text-white font-bold py-2 px-2 rounded-xl border border-sky-400/40 transition flex items-center justify-center gap-1.5 shadow";
     } else {
       const colorTxt =
         btn.dataset.tool === "BORRAR" ? "text-rose-400" : "text-slate-300";
       btn.className =
         "tool-btn bg-slate-900 " +
         colorTxt +
-        " hover:text-white font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5";
+        " hover:text-white font-semibold py-2 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5";
     }
   });
 }
@@ -619,7 +1020,7 @@ function resetearVistaCanvas(redibujar = true) {
   ajustarResolucionCanvas();
   const canvas = document.getElementById("canvasDiseno2d");
   const W = canvas ? canvas.width : 900;
-  const H = canvas ? canvas.height : 560;
+  const H = canvas ? canvas.height : 540;
 
   const anchoMetros =
     parseFloat(document.getElementById("inpAnchoMetros").value) || 100;
@@ -878,6 +1279,160 @@ function obtenerPasoCuadricula(pxPorMetro) {
   return 500;
 }
 
+function dibujarVista3DEnAsir(
+  ctx,
+  W,
+  H,
+  pxPorMetro,
+  aPantallaX,
+  aPantallaY,
+  alcanceMaxMesh,
+) {
+  const elevacionBasePx = 22;
+
+  const proyectar3D = (xM, yM, alturaM = 0) => {
+    const sx = aPantallaX(xM);
+    const sy = aPantallaY(yM);
+    return {
+      x: sx + alturaM * 0.35 * pxPorMetro * 0.45,
+      y: sy - alturaM * elevacionBasePx * (pxPorMetro / 6),
+    };
+  };
+
+  if (contornoMetros.length >= 3) {
+    ctx.save();
+    ctx.beginPath();
+    contornoMetros.forEach((pt, i) => {
+      const p3 = proyectar3D(pt.x, pt.y, -0.8);
+      if (i === 0) ctx.moveTo(p3.x, p3.y);
+      else ctx.lineTo(p3.x, p3.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = "rgba(6, 78, 59, 0.55)";
+    ctx.fill();
+    ctx.strokeStyle = "#047857";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    for (let i = 0; i < contornoMetros.length; i++) {
+      const a = contornoMetros[i];
+      const b = contornoMetros[(i + 1) % contornoMetros.length];
+      const supA = proyectar3D(a.x, a.y, 0);
+      const supB = proyectar3D(b.x, b.y, 0);
+      const infB = proyectar3D(b.x, b.y, -0.8);
+      const infA = proyectar3D(a.x, a.y, -0.8);
+
+      ctx.beginPath();
+      ctx.moveTo(supA.x, supA.y);
+      ctx.lineTo(supB.x, supB.y);
+      ctx.lineTo(infB.x, infB.y);
+      ctx.lineTo(infA.x, infA.y);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(16, 185, 129, 0.22)";
+      ctx.fill();
+      ctx.strokeStyle = "#34d399";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    contornoMetros.forEach((pt, i) => {
+      const p3 = proyectar3D(pt.x, pt.y, 0);
+      if (i === 0) ctx.moveTo(p3.x, p3.y);
+      else ctx.lineTo(p3.x, p3.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = "rgba(16, 185, 129, 0.16)";
+    ctx.fill();
+    ctx.strokeStyle = "#6ee7b7";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  if (document.getElementById("chkCapaPvc")?.checked) {
+    aristasPvc.forEach((arista) => {
+      const p1 = proyectar3D(arista.origen.x, arista.origen.y, 0.15);
+      const p2 = proyectar3D(arista.destino.x, arista.destino.y, 0.15);
+      ctx.save();
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  if (document.getElementById("chkCapaMesh")?.checked) {
+    aristasMesh.forEach((arista) => {
+      const alt1 = arista.origen.tipo === "REPETIDOR" ? 2.4 : 1.4;
+      const alt2 = arista.destino.tipo === "REPETIDOR" ? 2.4 : 1.4;
+      const p1 = proyectar3D(arista.origen.x, arista.origen.y, alt1);
+      const p2 = proyectar3D(arista.destino.x, arista.destino.y, alt2);
+      const fueraRango = arista.distancia > alcanceMaxMesh;
+
+      ctx.save();
+      ctx.setLineDash([6, 6]);
+      ctx.strokeStyle = fueraRango ? "#f43f5e" : "#a7f3d0";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  nodosPlano.forEach((nodo) => {
+    const alturaM =
+      nodo.tipo === "REPETIDOR" ? 2.4 : nodo.tipo === "NODO_ESP32" ? 1.4 : 0.6;
+    const base = proyectar3D(nodo.x, nodo.y, 0);
+    const cima = proyectar3D(nodo.x, nodo.y, alturaM);
+    const estilo = ESTILOS_NODO[nodo.tipo] || ESTILOS_NODO.VALVULA;
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(226, 232, 240, 0.65)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(base.x, base.y);
+    ctx.lineTo(cima.x, cima.y);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cima.x, cima.y, 13, 0, Math.PI * 2);
+    ctx.fillStyle = estilo.color;
+    ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = estilo.borde;
+    ctx.stroke();
+
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(estilo.icono, cima.x, cima.y + 1);
+
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(nodo.etiqueta + " (3D)", cima.x, cima.y - 18);
+    ctx.restore();
+  });
+
+  ctx.save();
+  ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+  ctx.fillRect(W - 155, ALTO_REGLA_SUP + 10, 142, 24);
+  ctx.strokeStyle = "#818cf8";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(W - 155, ALTO_REGLA_SUP + 10, 142, 24);
+  ctx.fillStyle = "#c7d2fe";
+  ctx.font = "bold 11px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("VISTA 3D — ASIR", W - 84, ALTO_REGLA_SUP + 22);
+  ctx.restore();
+}
+
 function redibujarLienzo() {
   ajustarResolucionCanvas();
   const canvas = document.getElementById("canvasDiseno2d");
@@ -897,11 +1452,9 @@ function redibujarLienzo() {
   const aPantallaX = (xM) => xM * pxPorMetro + panCanvasX;
   const aPantallaY = (yM) => yM * pxPorMetro + panCanvasY;
 
-  // 1. Fondo completo del viewport
   ctx.fillStyle = "#020617";
   ctx.fillRect(0, 0, W, H);
 
-  // 2. CAPA AÉREA según el modo seleccionado (SATELITE | ORTOFOTO | NINGUNO)
   let hayImagenActiva = false;
 
   if (modoFondo === "ORTOFOTO" && ortofotoConfig && ortofotoImgObj) {
@@ -954,7 +1507,6 @@ function redibujarLienzo() {
     ctx.restore();
   }
 
-  // 3. Cuadrícula Infinita
   const pasoGrid = obtenerPasoCuadricula(pxPorMetro);
   const minX_M = (ANCHO_REGLA_IZQ - panCanvasX) / pxPorMetro;
   const maxX_M = (W - panCanvasX) / pxPorMetro;
@@ -995,7 +1547,6 @@ function redibujarLienzo() {
     ctx.stroke();
   }
 
-  // Ejes principales 0m
   ctx.strokeStyle = "rgba(56, 189, 248, 0.25)";
   ctx.beginPath();
   ctx.moveTo(aPantallaX(0), ALTO_REGLA_SUP);
@@ -1004,142 +1555,149 @@ function redibujarLienzo() {
   ctx.lineTo(W, aPantallaY(0));
   ctx.stroke();
 
-  // 4. Contorno Real de la Parcela
-  if (contornoMetros.length >= 3) {
-    ctx.save();
-    ctx.beginPath();
-    contornoMetros.forEach((pt, i) => {
-      const sx = aPantallaX(pt.x);
-      const sy = aPantallaY(pt.y);
-      if (i === 0) ctx.moveTo(sx, sy);
-      else ctx.lineTo(sx, sy);
-    });
-    ctx.closePath();
-
-    ctx.fillStyle = hayImagenActiva
-      ? "rgba(16, 185, 129, 0.05)"
-      : "rgba(16, 185, 129, 0.14)";
-    ctx.fill();
-
-    ctx.strokeStyle = "#10b981";
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    for (let i = 0; i < contornoMetros.length; i++) {
-      const p1 = contornoMetros[i];
-      const p2 = contornoMetros[(i + 1) % contornoMetros.length];
-      const distLado = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-
-      const mx = (aPantallaX(p1.x) + aPantallaX(p2.x)) / 2;
-      const my = (aPantallaY(p1.y) + aPantallaY(p2.y)) / 2;
-
-      ctx.fillStyle = "rgba(2, 6, 23, 0.85)";
-      ctx.fillRect(mx - 23, my - 8, 46, 15);
-      ctx.fillStyle = "#34d399";
-      ctx.font = "bold 10px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(distLado.toFixed(1) + "m", mx, my + 3);
-
+  if (modoVistaEnAsir === "3d") {
+    dibujarVista3DEnAsir(
+      ctx,
+      W,
+      H,
+      pxPorMetro,
+      aPantallaX,
+      aPantallaY,
+      alcanceMaxMesh,
+    );
+  } else {
+    if (contornoMetros.length >= 3) {
+      ctx.save();
       ctx.beginPath();
-      ctx.arc(aPantallaX(p1.x), aPantallaY(p1.y), 4, 0, Math.PI * 2);
-      ctx.fillStyle = "#6ee7b7";
+      contornoMetros.forEach((pt, i) => {
+        const sx = aPantallaX(pt.x);
+        const sy = aPantallaY(pt.y);
+        if (i === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      });
+      ctx.closePath();
+
+      ctx.fillStyle = hayImagenActiva
+        ? "rgba(16, 185, 129, 0.05)"
+        : "rgba(16, 185, 129, 0.14)";
       ctx.fill();
-    }
-    ctx.restore();
-  }
 
-  // 5. Capa Tuberías PVC Óptimas
-  if (document.getElementById("chkCapaPvc").checked) {
-    aristasPvc.forEach((arista) => {
-      const x1 = aPantallaX(arista.origen.x);
-      const y1 = aPantallaY(arista.origen.y);
-      const x2 = aPantallaX(arista.destino.x);
-      const y2 = aPantallaY(arista.destino.y);
-
-      ctx.save();
-      ctx.strokeStyle = "#38bdf8";
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = "#10b981";
+      ctx.lineWidth = 2.5;
       ctx.stroke();
 
-      const mx = (x1 + x2) / 2;
-      const my = (y1 + y2) / 2;
-      ctx.fillStyle = "#0f172a";
-      ctx.fillRect(mx - 22, my - 9, 44, 16);
-      ctx.fillStyle = "#7dd3fc";
-      ctx.font = "bold 10px monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(arista.distancia.toFixed(1) + "m", mx, my + 3);
+      for (let i = 0; i < contornoMetros.length; i++) {
+        const p1 = contornoMetros[i];
+        const p2 = contornoMetros[(i + 1) % contornoMetros.length];
+        const distLado = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+
+        const mx = (aPantallaX(p1.x) + aPantallaX(p2.x)) / 2;
+        const my = (aPantallaY(p1.y) + aPantallaY(p2.y)) / 2;
+
+        ctx.fillStyle = "rgba(2, 6, 23, 0.85)";
+        ctx.fillRect(mx - 23, my - 8, 46, 15);
+        ctx.fillStyle = "#34d399";
+        ctx.font = "bold 10px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(distLado.toFixed(1) + "m", mx, my + 3);
+
+        ctx.beginPath();
+        ctx.arc(aPantallaX(p1.x), aPantallaY(p1.y), 4, 0, Math.PI * 2);
+        ctx.fillStyle = "#6ee7b7";
+        ctx.fill();
+      }
       ctx.restore();
-    });
-  }
+    }
 
-  // 6. Capa Enlaces Inalámbricos Mesh
-  if (document.getElementById("chkCapaMesh").checked) {
-    aristasMesh.forEach((arista) => {
-      const x1 = aPantallaX(arista.origen.x);
-      const y1 = aPantallaY(arista.origen.y);
-      const x2 = aPantallaX(arista.destino.x);
-      const y2 = aPantallaY(arista.destino.y);
-      const fueraRango = arista.distancia > alcanceMaxMesh;
+    if (document.getElementById("chkCapaPvc").checked) {
+      aristasPvc.forEach((arista) => {
+        const x1 = aPantallaX(arista.origen.x);
+        const y1 = aPantallaY(arista.origen.y);
+        const x2 = aPantallaX(arista.destino.x);
+        const y2 = aPantallaY(arista.destino.y);
+
+        ctx.save();
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(mx - 22, my - 9, 44, 16);
+        ctx.fillStyle = "#7dd3fc";
+        ctx.font = "bold 10px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(arista.distancia.toFixed(1) + "m", mx, my + 3);
+        ctx.restore();
+      });
+    }
+
+    if (document.getElementById("chkCapaMesh").checked) {
+      aristasMesh.forEach((arista) => {
+        const x1 = aPantallaX(arista.origen.x);
+        const y1 = aPantallaY(arista.origen.y);
+        const x2 = aPantallaX(arista.destino.x);
+        const y2 = aPantallaY(arista.destino.y);
+        const fueraRango = arista.distancia > alcanceMaxMesh;
+
+        ctx.save();
+        ctx.setLineDash([6, 6]);
+        ctx.strokeStyle = fueraRango ? "#f43f5e" : "#a7f3d0";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2 + 13;
+        ctx.fillStyle = fueraRango ? "#f43f5e" : "#6ee7b7";
+        ctx.font = "10px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          (fueraRango ? "⚠️ " : "") + arista.distancia.toFixed(0) + "m",
+          mx,
+          my,
+        );
+        ctx.restore();
+      });
+    }
+
+    nodosPlano.forEach((nodo) => {
+      const sx = aPantallaX(nodo.x);
+      const sy = aPantallaY(nodo.y);
+      const estilo = ESTILOS_NODO[nodo.tipo] || ESTILOS_NODO.VALVULA;
+      const radio = 15;
 
       ctx.save();
-      ctx.setLineDash([6, 6]);
-      ctx.strokeStyle = fueraRango ? "#f43f5e" : "#a7f3d0";
-      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      ctx.arc(sx, sy, radio, 0, Math.PI * 2);
+      ctx.fillStyle = estilo.color;
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = estilo.borde;
       ctx.stroke();
 
-      const mx = (x1 + x2) / 2;
-      const my = (y1 + y2) / 2 + 13;
-      ctx.fillStyle = fueraRango ? "#f43f5e" : "#6ee7b7";
-      ctx.font = "10px monospace";
+      ctx.font = "13px sans-serif";
       ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(estilo.icono, sx, sy + 1);
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "bold 11px sans-serif";
       ctx.fillText(
-        (fueraRango ? "⚠️ " : "") + arista.distancia.toFixed(0) + "m",
-        mx,
-        my,
+        nodo.etiqueta + " (" + nodo.x + "," + nodo.y + ")",
+        sx,
+        sy + radio + 11,
       );
       ctx.restore();
     });
   }
 
-  // 7. Nodos
-  nodosPlano.forEach((nodo) => {
-    const sx = aPantallaX(nodo.x);
-    const sy = aPantallaY(nodo.y);
-    const estilo = ESTILOS_NODO[nodo.tipo] || ESTILOS_NODO.VALVULA;
-    const radio = 15;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(sx, sy, radio, 0, Math.PI * 2);
-    ctx.fillStyle = estilo.color;
-    ctx.fill();
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = estilo.borde;
-    ctx.stroke();
-
-    ctx.font = "13px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(estilo.icono, sx, sy + 1);
-
-    ctx.fillStyle = "#f8fafc";
-    ctx.font = "bold 11px sans-serif";
-    ctx.fillText(
-      nodo.etiqueta + " (" + nodo.x + "," + nodo.y + ")",
-      sx,
-      sy + radio + 11,
-    );
-    ctx.restore();
-  });
-
-  // Mensaje limpio cuando el usuario aún no registra parcelas ni nodos
   if (parcelasDisponibles.length === 0 && nodosPlano.length === 0) {
     ctx.save();
     const centroAreaX = ANCHO_REGLA_IZQ + (W - ANCHO_REGLA_IZQ) / 2;
@@ -1156,7 +1714,6 @@ function redibujarLienzo() {
     ctx.restore();
   }
 
-  // 8. Reglas Fijas Superior e Izquierda
   ctx.save();
 
   ctx.fillStyle = "rgba(15, 23, 42, 0.94)";

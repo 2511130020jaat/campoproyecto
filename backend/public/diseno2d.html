@@ -4,170 +4,314 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ASIR - Diseñador 2D e IO</title>
-    <script src="https://cdn.tailwindcss.com"></script>    <link rel="stylesheet" href="/css/asir-theme.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/asir-theme.css" />
     <script src="/js/theme.js"></script>
 
     <script src="/js/auth.js"></script>
     <script src="/js/sidebar.js"></script>
     <script src="/js/diseno2d.js" defer></script>
+
+    <style>
+      .asir-io-card {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        border: 1px solid #60a5fa;
+        color: #0f172a;
+      }
+
+      .asir-io-title {
+        color: #1e3a8a;
+      }
+
+      .asir-io-sub {
+        color: #1e293b;
+      }
+
+      .asir-io-divider {
+        border-color: rgba(30, 58, 138, 0.2);
+      }
+
+      .asir-io-logo-badge {
+        background: #ffffff;
+        border: 1px solid #93c5fd;
+      }
+
+      html.dark .asir-io-card,
+      body.dark .asir-io-card,
+      [data-theme="oscuro"] .asir-io-card {
+        background: linear-gradient(135deg, #172554 0%, #1e1b4b 100%);
+        border-color: rgba(96, 165, 250, 0.35);
+        color: #f8fafc;
+      }
+
+      html.dark .asir-io-title,
+      body.dark .asir-io-title,
+      [data-theme="oscuro"] .asir-io-title {
+        color: #bfdbfe;
+      }
+
+      html.dark .asir-io-sub,
+      body.dark .asir-io-sub,
+      [data-theme="oscuro"] .asir-io-sub {
+        color: #cbd5e1;
+      }
+
+      html.dark .asir-io-divider,
+      body.dark .asir-io-divider,
+      [data-theme="oscuro"] .asir-io-divider {
+        border-color: rgba(148, 163, 184, 0.25);
+      }
+
+      html.dark .asir-io-logo-badge,
+      body.dark .asir-io-logo-badge,
+      [data-theme="oscuro"] .asir-io-logo-badge {
+        background: rgba(15, 23, 42, 0.9);
+        border-color: rgba(147, 197, 253, 0.35);
+      }
+    </style>
   </head>
   <body class="font-sans flex min-h-screen">
     <div id="sidebar-container"></div>
 
-    <main class="flex-grow p-4 md:p-6 space-y-5 min-w-0">
+    <main class="flex-grow p-3.5 md:p-5 space-y-3 min-w-0">
       <!-- Encabezado -->
       <header
-        class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700 pb-4"
+        class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700/50 pb-3"
       >
-        <div class="flex items-center gap-3">
-          <button id="btnMenu" class="lg:hidden text-2xl text-slate-300">
+        <div class="flex items-center gap-2.5">
+          <button id="btnMenu" class="lg:hidden text-xl text-slate-300">
             ☰
           </button>
           <div>
-            <h2 class="text-xl font-bold text-sky-400">
+            <h2
+              class="text-lg md:text-xl font-bold text-sky-500 dark:text-sky-400 leading-tight"
+            >
               📐 Diseñador 2D e Investigación Operativa
             </h2>
-            <p class="text-xs text-slate-400">
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">
               Optimización hidráulica PVC, red Mesh y vista aérea
               georreferenciada de la parcela
             </p>
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2.5">
           <select
             id="selParcelaDiseno"
             onchange="cargarDisenoParcela()"
-            class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2.5 font-semibold focus:outline-none focus:border-sky-500"
+            class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs rounded-xl px-3 py-2 font-semibold focus:outline-none focus:border-blue-500"
           >
             <option value="">Cargando parcelas...</option>
           </select>
 
           <button
+            type="button"
             onclick="guardarDisenoActual()"
-            class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-lg flex items-center gap-1.5"
+            class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition shadow flex items-center gap-1.5"
           >
             <span>💾</span> Guardar Plano
           </button>
         </div>
       </header>
 
-      <!-- BANNER SUPERIOR ASIR IO (Cuenta vinculada y acceso) -->
-      <section
-        id="bloqueAsirIo"
-        class="bg-slate-800 border border-slate-700 rounded-xl p-3.5 shadow-sm flex flex-wrap items-center justify-between gap-3"
-      >
-        <div class="flex items-center gap-3">
-          <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-          <div>
-            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400">ASIR IO</h3>
-            <p id="asirIoEstadoUsuario" class="text-xs text-slate-300 mt-0.5">Verificando sesión de usuario...</p>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2">
+      <!-- FILA SUPERIOR AL MISMO NIVEL: Métricas (izq) y ASIR IO (der) -->
+      <section class="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
+        <!-- Izquierda: Métricas y Costos IO -->
+        <div
+          class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm"
+        >
           <button
             type="button"
-            id="btnRefrescarPlanosIo"
-            class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+            onclick="toggleMetricasIo()"
+            class="w-full px-3.5 py-2.5 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-700/50 transition"
           >
-            🔄 Actualizar
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-sm">📊</span>
+              <span
+                class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide truncate"
+                >Métricas y Presupuesto Hidráulico (IO)</span
+              >
+            </div>
+            <span
+              id="icoToggleIo"
+              class="text-[11px] font-mono text-sky-600 dark:text-sky-400 bg-slate-100 dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 shrink-0"
+              >▼ Ver detalle</span
+            >
           </button>
-          <a
-            id="enlaceAbrirAsirIo"
-            href="http://localhost:5173"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm"
+
+          <div
+            id="panelMetricasIoDesplegable"
+            class="hidden border-t border-slate-200 dark:border-slate-700 p-2.5 bg-slate-50 dark:bg-slate-900/60 grid grid-cols-2 gap-2"
           >
-            Abrir ASIR IO ↗
-          </a>
-        </div>
-        <div id="listaPlanosAsirIo" class="hidden"></div>
-      </section>
+            <div
+              class="bg-white dark:bg-slate-800 px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700"
+            >
+              <p
+                class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400"
+              >
+                Tubería PVC (MST)
+              </p>
+              <h4
+                id="kpiMetrosPvc"
+                class="text-base font-black text-sky-600 dark:text-sky-400"
+              >
+                0.0 m
+              </h4>
+              <p
+                id="kpiTramosPvc"
+                class="text-[10px] text-slate-500 dark:text-slate-400"
+              >
+                0 tramos
+              </p>
+            </div>
 
-            <!-- Barra Plegable: Métricas y Costos de Investigación Operativa -->
-      <section class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-sm">
-        <button
-          type="button"
-          onclick="toggleMetricasIo()"
-          class="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-750 transition"
+            <div
+              class="bg-white dark:bg-slate-800 px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700"
+            >
+              <p
+                class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400"
+              >
+                Costo Estimado
+              </p>
+              <h4
+                id="kpiCostoPvc"
+                class="text-base font-black text-amber-600 dark:text-amber-400"
+              >
+                S/ 0.00
+              </h4>
+              <p class="text-[10px] text-slate-500 dark:text-slate-400">
+                Según tarifa por metro
+              </p>
+            </div>
+
+            <div
+              class="bg-white dark:bg-slate-800 px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700"
+            >
+              <p
+                class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400"
+              >
+                Enlaces Mesh
+              </p>
+              <h4
+                id="kpiEnlacesMesh"
+                class="text-base font-black text-emerald-600 dark:text-emerald-400"
+              >
+                0 enlaces
+              </h4>
+              <p
+                id="kpiEstadoMesh"
+                class="text-[10px] text-slate-500 dark:text-slate-400"
+              >
+                Cobertura inalámbrica
+              </p>
+            </div>
+
+            <div
+              class="bg-white dark:bg-slate-800 px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700"
+            >
+              <p
+                class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400"
+              >
+                Nodos en Plano
+              </p>
+              <h4
+                id="kpiTotalNodos"
+                class="text-base font-black text-purple-600 dark:text-purple-400"
+              >
+                0 nodos
+              </h4>
+              <p
+                id="kpiDetalleNodos"
+                class="text-[10px] text-slate-500 dark:text-slate-400"
+              >
+                Bombas y válvulas
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Derecha: Bloque ASIR IO -->
+        <div
+          id="bloqueAsirIo"
+          class="asir-io-card rounded-xl px-3.5 py-2.5 shadow-sm space-y-2"
         >
-          <div class="flex items-center gap-3">
-            <span class="text-base">📊</span>
-            <div>
-              <span class="text-xs font-bold text-slate-200 uppercase tracking-wide">Métricas y Presupuesto Hidráulico (IO)</span>
-              <span class="text-xs text-slate-400 block sm:inline sm:ml-2">Haz clic para ver tubería MST, costos y enlaces Mesh</span>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div
+                class="asir-io-logo-badge w-8 h-8 rounded-lg flex items-center justify-center shrink-0 p-1"
+              >
+                <img
+                  src="/img/logo-asir-io.png"
+                  alt="Logo ASIR IO"
+                  class="w-full h-full object-contain"
+                  onerror="
+                    this.style.display = 'none';
+                    document
+                      .getElementById('logoAsirIoFallback')
+                      ?.classList.remove('hidden');
+                  "
+                />
+                <span
+                  id="logoAsirIoFallback"
+                  class="hidden text-[10px] font-black text-blue-800"
+                  >IO</span
+                >
+              </div>
+              <div class="min-w-0">
+                <h3
+                  class="asir-io-title text-xs font-extrabold uppercase tracking-wider leading-none"
+                >
+                  ASIR IO
+                </h3>
+                <p
+                  id="asirIoEstadoUsuario"
+                  class="asir-io-sub text-[11px] truncate mt-0.5"
+                >
+                  Verificando sesión...
+                </p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                id="btnEnviarParcelaAsirIo"
+                class="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition cursor-pointer"
+              >
+                🚀 Enviar parcela a ASIR IO
+              </button>
+              <a
+                id="enlaceAbrirAsirIo"
+                href="http://localhost:5173"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-indigo-700 hover:bg-indigo-600 text-white transition"
+              >
+                ASIR IO ↗
+              </a>
             </div>
           </div>
-          <span id="icoToggleIo" class="text-xs font-mono text-sky-400 bg-slate-900 px-2 py-1 rounded border border-slate-700">▼ Ver detalle</span>
-        </button>
 
-        <div id="panelMetricasIoDesplegable" class="hidden border-t border-slate-700 p-4 bg-slate-900/60 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
-          <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 flex items-center justify-between">
-            <div>
-              <p class="text-[10px] uppercase font-bold text-slate-400">Tubería PVC (MST)</p>
-              <h4 id="kpiMetrosPvc" class="text-xl font-black text-sky-400">0.0 m</h4>
-              <p id="kpiTramosPvc" class="text-[10px] text-slate-400">0 tramos</p>
-            </div>
-            <span class="text-2xl">🚰</span>
-          </div>
-
-          <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 flex items-center justify-between">
-            <div>
-              <p class="text-[10px] uppercase font-bold text-slate-400">Costo Estimado</p>
-              <h4 id="kpiCostoPvc" class="text-xl font-black text-amber-400">S/ 0.00</h4>
-              <p class="text-[10px] text-slate-400">Según tarifa por metro</p>
-            </div>
-            <span class="text-2xl">💰</span>
-          </div>
-
-          <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 flex items-center justify-between">
-            <div>
-              <p class="text-[10px] uppercase font-bold text-slate-400">Enlaces Mesh</p>
-              <h4 id="kpiEnlacesMesh" class="text-xl font-black text-emerald-400">0 enlaces</h4>
-              <p id="kpiEstadoMesh" class="text-[10px] text-slate-400">Cobertura inalámbrica</p>
-            </div>
-            <span class="text-2xl">📡</span>
-          </div>
-
-          <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 flex items-center justify-between">
-            <div>
-              <p class="text-[10px] uppercase font-bold text-slate-400">Nodos en Plano</p>
-              <h4 id="kpiTotalNodos" class="text-xl font-black text-purple-400">0 nodos</h4>
-              <p id="kpiDetalleNodos" class="text-[10px] text-slate-400">Bombas y válvulas</p>
-            </div>
-            <span class="text-2xl">📍</span>
+          <!-- Resultado final 2D / 3D de la parcela -->
+          <div
+            id="resultadoFinalAsirIo"
+            class="asir-io-divider border-t pt-1.5 text-xs asir-io-sub"
+          >
+            Selecciona una parcela para ver su resultado final en 2D / 3D.
           </div>
         </div>
       </section>
-
-      <script>
-        function toggleMetricasIo() {
-          const panel = document.getElementById("panelMetricasIoDesplegable");
-          const ico = document.getElementById("icoToggleIo");
-          if (!panel) return;
-          const estaOculto = panel.classList.contains("hidden");
-          if (estaOculto) {
-            panel.classList.remove("hidden");
-            if (ico) ico.innerText = "▲ Ocultar";
-          } else {
-            panel.classList.add("hidden");
-            if (ico) ico.innerText = "▼ Ver detalle";
-          }
-        }
-      </script>
 
       <!-- Workspace Principal -->
-      <section class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <section class="grid grid-cols-1 lg:grid-cols-4 gap-5">
         <!-- Panel Lateral -->
         <aside
-          class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl space-y-5 lg:col-span-1 h-fit"
+          class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl space-y-4 lg:col-span-1 h-fit"
         >
           <!-- 1. Herramientas -->
           <div>
             <h3
-              class="text-xs font-bold uppercase text-slate-400 tracking-wider mb-3"
+              class="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider mb-2.5"
             >
               1. Herramientas del Lienzo
             </h3>
@@ -176,7 +320,7 @@
                 type="button"
                 data-tool="MOVER"
                 onclick="seleccionarHerramienta('MOVER')"
-                class="tool-btn bg-sky-600 text-white font-bold py-2.5 px-2 rounded-xl border border-sky-400/40 transition flex items-center justify-center gap-1.5"
+                class="tool-btn bg-sky-600 text-white font-bold py-2 px-2 rounded-xl border border-sky-400/40 transition flex items-center justify-center gap-1.5"
               >
                 <span>🖐️</span> Mover
               </button>
@@ -184,7 +328,7 @@
                 type="button"
                 data-tool="BOMBA"
                 onclick="seleccionarHerramienta('BOMBA')"
-                class="tool-btn bg-slate-900 text-slate-300 hover:text-white font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5"
+                class="tool-btn bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-semibold py-2 px-2 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center gap-1.5"
               >
                 <span>⛽</span> Bomba
               </button>
@@ -192,7 +336,7 @@
                 type="button"
                 data-tool="VALVULA"
                 onclick="seleccionarHerramienta('VALVULA')"
-                class="tool-btn bg-slate-900 text-slate-300 hover:text-white font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5"
+                class="tool-btn bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-semibold py-2 px-2 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center gap-1.5"
               >
                 <span>💧</span> Válvula
               </button>
@@ -200,7 +344,7 @@
                 type="button"
                 data-tool="NODO_ESP32"
                 onclick="seleccionarHerramienta('NODO_ESP32')"
-                class="tool-btn bg-slate-900 text-slate-300 hover:text-white font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5"
+                class="tool-btn bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-semibold py-2 px-2 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center gap-1.5"
               >
                 <span>📡</span> ESP32
               </button>
@@ -208,7 +352,7 @@
                 type="button"
                 data-tool="REPETIDOR"
                 onclick="seleccionarHerramienta('REPETIDOR')"
-                class="tool-btn bg-slate-900 text-slate-300 hover:text-white font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5"
+                class="tool-btn bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white font-semibold py-2 px-2 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center gap-1.5"
               >
                 <span>📶</span> Repetidor
               </button>
@@ -216,44 +360,73 @@
                 type="button"
                 data-tool="BORRAR"
                 onclick="seleccionarHerramienta('BORRAR')"
-                class="tool-btn bg-slate-900 text-rose-400 hover:bg-rose-500/20 font-semibold py-2.5 px-2 rounded-xl border border-slate-700 transition flex items-center justify-center gap-1.5"
+                class="tool-btn bg-slate-100 dark:bg-slate-900 text-rose-600 dark:text-rose-400 hover:bg-rose-500/15 font-semibold py-2 px-2 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center gap-1.5"
               >
                 <span>🗑️</span> Borrar
               </button>
             </div>
-            <p id="lblAyudaHerramienta" class="text-[11px] text-sky-400 mt-2.5">
+            <p
+              id="lblAyudaHerramienta"
+              class="text-[11px] text-sky-700 dark:text-sky-400 mt-2"
+            >
               🖐️ Arrastra nodos, mueve el fondo o usa la rueda del ratón para
               hacer zoom.
             </p>
           </div>
 
-                    <!-- 2. Fondo del Lienzo -->
-          <div class="border-t border-slate-700 pt-3.5 space-y-2.5">
+          <!-- 2. Fondo del Lienzo -->
+          <div
+            class="border-t border-slate-200 dark:border-slate-700 pt-3 space-y-2"
+          >
             <div class="flex items-center justify-between">
-              <h3 class="text-xs font-bold uppercase text-slate-400 tracking-wider">
+              <h3
+                class="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider"
+              >
                 Fondo Satelital
               </h3>
               <button
                 type="button"
                 id="btnToggleFondoImagen"
                 onclick="alternarFondoSateliteOnOff()"
-                class="bg-slate-900 hover:bg-slate-700 border border-slate-700 text-xs px-2.5 py-1 rounded text-slate-300 transition"
+                class="bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-xs px-2.5 py-1 rounded text-slate-800 dark:text-slate-300 transition"
               >
                 👁️ Ocultar imagen
               </button>
             </div>
 
-            <!-- Botones ocultos para compatibilidad técnica con diseno2d.js -->
             <div class="hidden">
-              <button type="button" data-fondo="SATELITE" onclick="cambiarModoFondo('SATELITE')" class="fondo-btn"></button>
-              <button type="button" data-fondo="ORTOFOTO" onclick="cambiarModoFondo('ORTOFOTO')" class="fondo-btn"></button>
-              <button type="button" data-fondo="NINGUNO" onclick="cambiarModoFondo('NINGUNO')" class="fondo-btn"></button>
+              <button
+                type="button"
+                data-fondo="SATELITE"
+                onclick="cambiarModoFondo('SATELITE')"
+                class="fondo-btn"
+              ></button>
+              <button
+                type="button"
+                data-fondo="ORTOFOTO"
+                onclick="cambiarModoFondo('ORTOFOTO')"
+                class="fondo-btn"
+              ></button>
+              <button
+                type="button"
+                data-fondo="NINGUNO"
+                onclick="cambiarModoFondo('NINGUNO')"
+                class="fondo-btn"
+              ></button>
             </div>
 
-            <div class="bg-slate-900/90 p-2.5 rounded-lg border border-slate-700 space-y-1.5 text-xs">
-              <div class="flex justify-between text-[11px] text-slate-400">
+            <div
+              class="bg-slate-100 dark:bg-slate-900/90 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5 text-xs"
+            >
+              <div
+                class="flex justify-between text-[11px] text-slate-600 dark:text-slate-400"
+              >
                 <span>Opacidad</span>
-                <span id="valOpacidadOrto" class="font-mono text-slate-200">65%</span>
+                <span
+                  id="valOpacidadOrto"
+                  class="font-mono text-slate-900 dark:text-slate-200"
+                  >65%</span
+                >
               </div>
               <input
                 type="range"
@@ -267,31 +440,20 @@
             </div>
           </div>
 
-          <script>
-            let fondoVisible = true;
-            function alternarFondoSateliteOnOff() {
-              fondoVisible = !fondoVisible;
-              const btn = document.getElementById("btnToggleFondoImagen");
-              if (fondoVisible) {
-                cambiarModoFondo("SATELITE");
-                if (btn) btn.innerText = "👁️ Ocultar imagen";
-              } else {
-                cambiarModoFondo("NINGUNO");
-                if (btn) btn.innerText = "👁️ Mostrar imagen";
-              }
-            }
-          </script>
           <!-- 3. Dimensiones y Costos -->
-          <div class="border-t border-slate-700 pt-4 space-y-3">
+          <div
+            class="border-t border-slate-200 dark:border-slate-700 pt-3.5 space-y-2.5"
+          >
             <h3
-              class="text-xs font-bold uppercase text-slate-400 tracking-wider"
+              class="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider"
             >
               3. Dimensiones y Costos
             </h3>
 
             <div class="grid grid-cols-2 gap-2.5">
               <div>
-                <label class="block text-[11px] text-slate-400 mb-1"
+                <label
+                  class="block text-[11px] text-slate-600 dark:text-slate-400 mb-1"
                   >Ancho Área (m)</label
                 >
                 <input
@@ -301,11 +463,12 @@
                   min="10"
                   max="2000"
                   oninput="recalcularYRedibujar()"
-                  class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
+                  class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-200 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
                 />
               </div>
               <div>
-                <label class="block text-[11px] text-slate-400 mb-1"
+                <label
+                  class="block text-[11px] text-slate-600 dark:text-slate-400 mb-1"
                   >Largo Área (m)</label
                 >
                 <input
@@ -315,14 +478,15 @@
                   min="10"
                   max="2000"
                   oninput="recalcularYRedibujar()"
-                  class="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
+                  class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-200 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
                 />
               </div>
             </div>
 
             <div class="grid grid-cols-2 gap-2.5">
               <div>
-                <label class="block text-[11px] text-slate-400 mb-1"
+                <label
+                  class="block text-[11px] text-slate-600 dark:text-slate-400 mb-1"
                   >Costo PVC (S/ / m)</label
                 >
                 <input
@@ -332,11 +496,12 @@
                   value="4.50"
                   min="0.1"
                   oninput="recalcularYRedibujar()"
-                  class="w-full bg-slate-900 border border-slate-700 text-amber-400 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
+                  class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-amber-700 dark:text-amber-400 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
                 />
               </div>
               <div>
-                <label class="block text-[11px] text-slate-400 mb-1"
+                <label
+                  class="block text-[11px] text-slate-600 dark:text-slate-400 mb-1"
                   >Alcance Mesh (m)</label
                 >
                 <input
@@ -346,67 +511,69 @@
                   min="5"
                   max="1000"
                   oninput="recalcularYRedibujar()"
-                  class="w-full bg-slate-900 border border-slate-700 text-emerald-400 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
+                  class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-emerald-700 dark:text-emerald-400 text-xs rounded-lg p-2 font-mono focus:outline-none focus:border-sky-500"
                 />
               </div>
             </div>
           </div>
 
           <!-- 4. Capas -->
-          <div class="border-t border-slate-700 pt-4 space-y-2">
+          <div
+            class="border-t border-slate-200 dark:border-slate-700 pt-3.5 space-y-2"
+          >
             <h3
-              class="text-xs font-bold uppercase text-slate-400 tracking-wider"
+              class="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider"
             >
               4. Capas de Optimización
             </h3>
 
             <label
-              class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer"
+              class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer"
             >
               <input
                 type="checkbox"
                 id="chkCapaPvc"
                 checked
                 onchange="redibujarLienzo()"
-                class="rounded bg-slate-900 border-slate-600 text-sky-500"
+                class="rounded bg-slate-100 dark:bg-slate-900 border-slate-400 dark:border-slate-600 text-sky-500"
               />
               <span>🚰 Ruta Óptima Tuberías PVC</span>
             </label>
 
             <label
-              class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer"
+              class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer"
             >
               <input
                 type="checkbox"
                 id="chkCapaMesh"
                 checked
                 onchange="redibujarLienzo()"
-                class="rounded bg-slate-900 border-slate-600 text-emerald-500"
+                class="rounded bg-slate-100 dark:bg-slate-900 border-slate-400 dark:border-slate-600 text-emerald-500"
               />
               <span>📡 Enlaces Inalámbricos Mesh</span>
             </label>
           </div>
 
-                    <div class="border-t border-slate-700 pt-3">
+          <div class="border-t border-slate-200 dark:border-slate-700 pt-3">
             <button
               type="button"
               onclick="limpiarLienzo()"
-              class="w-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold py-2 rounded-lg transition flex items-center justify-center gap-1.5"
+              class="w-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-300 border border-rose-500/30 text-xs font-semibold py-2 rounded-lg transition flex items-center justify-center gap-1.5"
             >
               <span>🧹</span> Limpiar Lienzo
             </button>
           </div>
         </aside>
 
-        <!-- Área del Lienzo Interactivo 2D -->
+        <!-- Área del Lienzo Interactivo 2D / Vista 3D en ASIR -->
         <div
-          class="lg:col-span-3 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden flex flex-col"
+          class="lg:col-span-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden flex flex-col"
         >
           <div
-            class="p-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 bg-slate-800/80"
+            class="p-3 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/80"
           >
             <div
-              class="flex flex-wrap items-center gap-3 text-[11px] text-slate-300"
+              class="flex flex-wrap items-center gap-3 text-[11px] text-slate-700 dark:text-slate-300"
             >
               <span class="flex items-center gap-1"
                 ><span
@@ -432,42 +599,46 @@
                 ></span>
                 Repetidor</span
               >
-              <span class="text-slate-600">|</span>
-              <span class="text-sky-400 font-semibold">━━ PVC</span>
-              <span class="text-emerald-400 font-semibold">┅┅ Mesh</span>
+              <span class="text-slate-400 dark:text-slate-600">|</span>
+              <span class="text-sky-600 dark:text-sky-400 font-semibold"
+                >━━ PVC</span
+              >
+              <span class="text-emerald-600 dark:text-emerald-400 font-semibold"
+                >┅┅ Mesh</span
+              >
             </div>
 
             <div class="flex items-center gap-1.5">
               <button
                 type="button"
                 onclick="cambiarZoomCanvas(-0.2)"
-                class="bg-slate-900 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-2.5 py-1 rounded-lg"
+                class="bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold px-2.5 py-1 rounded-lg"
               >
                 ➖
               </button>
               <span
                 id="lblNivelZoom"
-                class="text-xs font-mono text-sky-400 bg-slate-900 px-2 py-1 rounded-lg border border-slate-700"
+                class="text-xs font-mono text-sky-600 dark:text-sky-400 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700"
               >
                 100%
               </span>
               <button
                 type="button"
                 onclick="cambiarZoomCanvas(0.2)"
-                class="bg-slate-900 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-2.5 py-1 rounded-lg"
+                class="bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold px-2.5 py-1 rounded-lg"
               >
                 ➕
               </button>
               <button
                 type="button"
                 onclick="resetearVistaCanvas()"
-                class="bg-slate-900 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs px-2.5 py-1 rounded-lg"
+                class="bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs px-2.5 py-1 rounded-lg"
               >
                 Centrar
               </button>
               <span
                 id="lblCoordsCursor"
-                class="text-xs font-mono text-slate-400 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700"
+                class="text-xs font-mono text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700"
               >
                 X: 0.0 m | Y: 0.0 m
               </span>
@@ -476,7 +647,7 @@
 
           <div
             id="contenedorCanvas2d"
-            class="relative w-full h-[560px] bg-slate-950 flex-grow overflow-hidden"
+            class="relative w-full h-[540px] bg-slate-950 flex-grow overflow-hidden"
           >
             <canvas
               id="canvasDiseno2d"
@@ -485,96 +656,35 @@
           </div>
         </div>
       </section>
-      
-
-      <script>
-        (() => {
-          const ASIR_IO_WEB_URL = "http://localhost:5173";
-          const ASIR_IO_API_URL = "http://localhost:5000";
-
-          const estadoEl = document.getElementById("asirIoEstadoUsuario");
-          const listaEl = document.getElementById("listaPlanosAsirIo");
-          const enlaceEl = document.getElementById("enlaceAbrirAsirIo");
-          const btnRefrescar = document.getElementById("btnRefrescarPlanosIo");
-
-          function obtenerUsuarioAsir() {
-            try {
-              const raw = localStorage.getItem("usuario_asir");
-              return raw ? JSON.parse(raw) : null;
-            } catch {
-              return null;
-            }
-          }
-
-          async function cargarPlanosAsirIo() {
-            const usuario = obtenerUsuarioAsir();
-            enlaceEl.href = ASIR_IO_WEB_URL;
-
-            if (!usuario || !usuario.id) {
-              estadoEl.textContent =
-                "Sin sesión activa en ASIR — inicia sesión para ver tus planos de ASIR IO.";
-              listaEl.innerHTML = `<p class="text-slate-400 col-span-full">Inicia sesión con tu cuenta en ASIR para consultar tus esquemas guardados.</p>`;
-              return;
-            }
-
-            const nombreMostrar =
-              usuario.nombre ||
-              usuario.correo ||
-              usuario.email ||
-              `ID ${usuario.id}`;
-            estadoEl.textContent = `Cuenta vinculada: ${nombreMostrar} (ID: ${usuario.id})`;
-
-            try {
-              const url = `${ASIR_IO_API_URL}/api/esquemas?id_usuario=${encodeURIComponent(usuario.id)}`;
-              const resp = await fetch(url);
-              const data = await resp.json();
-
-              if (!resp.ok || !data.ok) {
-                listaEl.innerHTML = `<p class="text-rose-400 col-span-full">No se pudieron cargar los planos de ASIR IO.</p>`;
-                return;
-              }
-
-              const esquemas = Array.isArray(data.esquemas)
-                ? data.esquemas
-                : [];
-              if (esquemas.length === 0) {
-                listaEl.innerHTML = `<p class="text-slate-400 col-span-full">Aún no tienes planos guardados en ASIR IO con esta cuenta.</p>`;
-                return;
-              }
-
-              listaEl.innerHTML = esquemas
-                .map((plano) => {
-                  const fechaTexto = plano.fecha
-                    ? new Date(plano.fecha).toLocaleDateString("es-PE")
-                    : "Sin fecha";
-                  const nombreSeguro = String(plano.nombre || plano.id)
-                    .replace(/</g, "<")
-                    .replace(/>/g, ">");
-                  const idSeguro = encodeURIComponent(plano.id);
-
-                  return `
-                    <a
-                      href="${ASIR_IO_WEB_URL}/?plano=${idSeguro}"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="block p-3 rounded-xl bg-slate-900 hover:bg-slate-950 border border-slate-700 hover:border-emerald-500/60 transition"
-                    >
-                      <div class="font-semibold text-white truncate">${nombreSeguro}</div>
-                      <div class="text-[11px] text-slate-400 mt-1">Guardado: ${fechaTexto}</div>
-                    </a>
-                  `;
-                })
-                .join("");
-            } catch {
-              listaEl.innerHTML = `<p class="text-amber-400 col-span-full">No se pudo conectar con el servidor de ASIR IO (puerto 5000).</p>`;
-            }
-          }
-
-          btnRefrescar?.addEventListener("click", cargarPlanosAsirIo);
-          document.addEventListener("DOMContentLoaded", cargarPlanosAsirIo);
-          cargarPlanosAsirIo();
-        })();
-      </script>
     </main>
+
+    <script>
+      let fondoVisible = true;
+      function alternarFondoSateliteOnOff() {
+        fondoVisible = !fondoVisible;
+        const btn = document.getElementById("btnToggleFondoImagen");
+        if (fondoVisible) {
+          cambiarModoFondo("SATELITE");
+          if (btn) btn.innerText = "👁️ Ocultar imagen";
+        } else {
+          cambiarModoFondo("NINGUNO");
+          if (btn) btn.innerText = "👁️ Mostrar imagen";
+        }
+      }
+
+      function toggleMetricasIo() {
+        const panel = document.getElementById("panelMetricasIoDesplegable");
+        const ico = document.getElementById("icoToggleIo");
+        if (!panel) return;
+        const estaOculto = panel.classList.contains("hidden");
+        if (estaOculto) {
+          panel.classList.remove("hidden");
+          if (ico) ico.innerText = "▲ Ocultar";
+        } else {
+          panel.classList.add("hidden");
+          if (ico) ico.innerText = "▼ Ver detalle";
+        }
+      }
+    </script>
   </body>
 </html>
